@@ -12,3 +12,6 @@ dependencies = [
 
 [project.scripts]
 gmail-cli = "gmail_cli:main"
+
+[tool.uv]
+dev-dependencies = []
