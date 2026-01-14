@@ -2,10 +2,12 @@
 """Gmail CLI - Read, send, and reply to emails."""
 
 import argparse
+import base64
 import sys
 from datetime import datetime
 
 from auth import authenticate
+from html_to_markdown import convert_to_markdown
 
 
 def format_date(timestamp_ms: str) -> str:
@@ -20,6 +22,43 @@ def get_header(headers: list, name: str) -> str:
         if header['name'].lower() == name.lower():
             return header['value']
     return ''
+
+
+def get_body(payload: dict) -> str:
+    """Extract plain text or HTML body from message payload."""
+    # Check for simple body
+    if 'body' in payload and payload['body'].get('data'):
+        return decode_body(payload['body']['data'])
+
+    # Check multipart
+    parts = payload.get('parts', [])
+
+    # Prefer plain text
+    for part in parts:
+        if part.get('mimeType') == 'text/plain':
+            if part.get('body', {}).get('data'):
+                return decode_body(part['body']['data'])
+
+    # Fall back to HTML
+    for part in parts:
+        if part.get('mimeType') == 'text/html':
+            if part.get('body', {}).get('data'):
+                html = decode_body(part['body']['data'])
+                return convert_to_markdown(html)
+
+    # Recurse into nested multipart
+    for part in parts:
+        if part.get('mimeType', '').startswith('multipart/'):
+            result = get_body(part)
+            if result:
+                return result
+
+    return ''
+
+
+def decode_body(data: str) -> str:
+    """Decode base64url encoded body."""
+    return base64.urlsafe_b64decode(data).decode('utf-8', errors='replace')
 
 
 def cmd_list(args) -> int:
@@ -62,6 +101,51 @@ def cmd_list(args) -> int:
     return 0
 
 
+def cmd_read(args) -> int:
+    """Read full email content."""
+    service = authenticate()
+
+    message_ids = args.ids
+
+    # If query mode, fetch IDs first
+    if args.query:
+        results = service.users().messages().list(
+            userId='me',
+            q=args.query,
+            maxResults=args.limit or 10
+        ).execute()
+        message_ids = [m['id'] for m in results.get('messages', [])]
+
+    if not message_ids:
+        print('No messages found.')
+        return 0
+
+    for i, msg_id in enumerate(message_ids):
+        if i > 0:
+            print('\n' + '=' * 60 + '\n')
+
+        msg = service.users().messages().get(
+            userId='me',
+            id=msg_id,
+            format='full'
+        ).execute()
+
+        headers = msg.get('payload', {}).get('headers', [])
+
+        print(f"Message-ID: {msg['id']}")
+        print(f"Thread-ID: {msg['threadId']}")
+        print(f"From: {get_header(headers, 'From')}")
+        print(f"To: {get_header(headers, 'To')}")
+        print(f"Subject: {get_header(headers, 'Subject')}")
+        print(f"Date: {format_date(msg.get('internalDate', '0'))}")
+        print('\n---\n')
+
+        body = get_body(msg.get('payload', {}))
+        print(body.strip() if body else '(No body content)')
+
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description='Gmail CLI - Read, send, and reply to emails'
@@ -74,6 +158,14 @@ def main() -> int:
     list_parser.add_argument('--limit', '-n', type=int, default=10,
                             help='Max messages to return (default: 10)')
     list_parser.set_defaults(func=cmd_list)
+
+    # read command
+    read_parser = subparsers.add_parser('read', help='Read email content')
+    read_parser.add_argument('ids', nargs='*', help='Message IDs to read')
+    read_parser.add_argument('--query', '-q', help='Gmail search query')
+    read_parser.add_argument('--limit', '-n', type=int, default=10,
+                            help='Max messages when using query (default: 10)')
+    read_parser.set_defaults(func=cmd_read)
 
     args = parser.parse_args()
     return args.func(args)
