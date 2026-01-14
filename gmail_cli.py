@@ -149,7 +149,7 @@ def cmd_read(args) -> int:
 
 
 def cmd_send(args) -> int:
-    """Send a new email."""
+    """Send a new email or create a draft."""
     service = authenticate()
 
     # Get body from args or file
@@ -167,21 +167,29 @@ def cmd_send(args) -> int:
 
     raw = base64.urlsafe_b64encode(message.as_bytes()).decode('utf-8')
 
-    result = service.users().messages().send(
-        userId='me',
-        body={'raw': raw}
-    ).execute()
-
-    print('Message sent successfully.')
-    print(f"Message-ID: {result['id']}")
-    if 'threadId' in result:
-        print(f"Thread-ID: {result['threadId']}")
+    if args.draft:
+        result = service.users().drafts().create(
+            userId='me',
+            body={'message': {'raw': raw}}
+        ).execute()
+        print('Draft created successfully.')
+        print(f"Draft-ID: {result['id']}")
+        print(f"Message-ID: {result['message']['id']}")
+    else:
+        result = service.users().messages().send(
+            userId='me',
+            body={'raw': raw}
+        ).execute()
+        print('Message sent successfully.')
+        print(f"Message-ID: {result['id']}")
+        if 'threadId' in result:
+            print(f"Thread-ID: {result['threadId']}")
 
     return 0
 
 
 def cmd_reply(args) -> int:
-    """Reply to an existing email."""
+    """Reply to an existing email or create a draft reply."""
     service = authenticate()
 
     # Fetch original message for threading info
@@ -220,14 +228,23 @@ def cmd_reply(args) -> int:
 
     raw = base64.urlsafe_b64encode(message.as_bytes()).decode('utf-8')
 
-    result = service.users().messages().send(
-        userId='me',
-        body={'raw': raw, 'threadId': thread_id}
-    ).execute()
-
-    print('Reply sent successfully.')
-    print(f"Message-ID: {result['id']}")
-    print(f"Thread-ID: {result['threadId']}")
+    if args.draft:
+        result = service.users().drafts().create(
+            userId='me',
+            body={'message': {'raw': raw, 'threadId': thread_id}}
+        ).execute()
+        print('Draft reply created successfully.')
+        print(f"Draft-ID: {result['id']}")
+        print(f"Message-ID: {result['message']['id']}")
+        print(f"Thread-ID: {thread_id}")
+    else:
+        result = service.users().messages().send(
+            userId='me',
+            body={'raw': raw, 'threadId': thread_id}
+        ).execute()
+        print('Reply sent successfully.')
+        print(f"Message-ID: {result['id']}")
+        print(f"Thread-ID: {result['threadId']}")
 
     return 0
 
@@ -259,6 +276,8 @@ def main() -> int:
     send_parser.add_argument('--subject', '-s', help='Email subject')
     send_parser.add_argument('--body', '-b', help='Email body text')
     send_parser.add_argument('--file', '-f', help='Read body from file')
+    send_parser.add_argument('--draft', '-d', action='store_true',
+                            help='Create draft instead of sending')
     send_parser.set_defaults(func=cmd_send)
 
     # reply command
@@ -266,6 +285,8 @@ def main() -> int:
     reply_parser.add_argument('message_id', help='Message ID to reply to')
     reply_parser.add_argument('--body', '-b', help='Reply body text')
     reply_parser.add_argument('--file', '-f', help='Read body from file')
+    reply_parser.add_argument('--draft', '-d', action='store_true',
+                            help='Create draft instead of sending')
     reply_parser.set_defaults(func=cmd_reply)
 
     args = parser.parse_args()

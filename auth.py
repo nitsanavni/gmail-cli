@@ -1,4 +1,4 @@
-"""Gmail OAuth authentication with send and readonly scopes."""
+"""Gmail OAuth authentication with compose and readonly scopes."""
 
 import json
 from pathlib import Path
@@ -11,7 +11,7 @@ from googleapiclient.discovery import build
 
 SCOPES = [
     'https://www.googleapis.com/auth/gmail.readonly',
-    'https://www.googleapis.com/auth/gmail.send',
+    'https://www.googleapis.com/auth/gmail.compose',  # drafts + send
 ]
 
 
