@@ -31,4 +31,4 @@ uv run gmail_cli.py reply <message-id> --body "Reply text" --draft
 ## Scopes
 
 - `gmail.readonly` - list/read
-- `gmail.send` - send/reply
+- `gmail.compose` - send/reply/drafts
