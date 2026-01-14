@@ -19,42 +19,11 @@ def format_date(timestamp_ms: str) -> str:
 
 
 def get_header(headers: list, name: str) -> str:
-    """Extract header value by name."""
+    """Extract header value by name (case-insensitive)."""
+    name_lower = name.lower()
     for header in headers:
-        if header['name'].lower() == name.lower():
+        if header['name'].lower() == name_lower:
             return header['value']
-    return ''
-
-
-def get_body(payload: dict) -> str:
-    """Extract plain text or HTML body from message payload."""
-    # Check for simple body
-    if 'body' in payload and payload['body'].get('data'):
-        return decode_body(payload['body']['data'])
-
-    # Check multipart
-    parts = payload.get('parts', [])
-
-    # Prefer plain text
-    for part in parts:
-        if part.get('mimeType') == 'text/plain':
-            if part.get('body', {}).get('data'):
-                return decode_body(part['body']['data'])
-
-    # Fall back to HTML
-    for part in parts:
-        if part.get('mimeType') == 'text/html':
-            if part.get('body', {}).get('data'):
-                html = decode_body(part['body']['data'])
-                return convert_to_markdown(html)
-
-    # Recurse into nested multipart
-    for part in parts:
-        if part.get('mimeType', '').startswith('multipart/'):
-            result = get_body(part)
-            if result:
-                return result
-
     return ''
 
 
@@ -63,21 +32,73 @@ def decode_body(data: str) -> str:
     return base64.urlsafe_b64decode(data).decode('utf-8', errors='replace')
 
 
+def extract_part_body(part: dict, mime_type: str) -> str | None:
+    """Extract body from a message part if it matches the mime type."""
+    if part.get('mimeType') != mime_type:
+        return None
+
+    data = part.get('body', {}).get('data')
+    if not data:
+        return None
+
+    content = decode_body(data)
+    if mime_type == 'text/html':
+        return convert_to_markdown(content)
+    return content
+
+
+def get_body(payload: dict) -> str:
+    """Extract plain text or HTML body from message payload."""
+    # Simple body (non-multipart)
+    if payload.get('body', {}).get('data'):
+        return decode_body(payload['body']['data'])
+
+    parts = payload.get('parts', [])
+
+    # Prefer plain text
+    for part in parts:
+        if body := extract_part_body(part, 'text/plain'):
+            return body
+
+    # Fall back to HTML
+    for part in parts:
+        if body := extract_part_body(part, 'text/html'):
+            return body
+
+    # Recurse into nested multipart
+    for part in parts:
+        if part.get('mimeType', '').startswith('multipart/'):
+            if body := get_body(part):
+                return body
+
+    return ''
+
+
+def get_body_content(args) -> str | None:
+    """Get message body from args (--body or --file)."""
+    if args.file:
+        return Path(args.file).read_text()
+    if args.body:
+        return args.body
+    return None
+
+
+def encode_message(message: MIMEText) -> str:
+    """Encode a MIMEText message for Gmail API."""
+    return base64.urlsafe_b64encode(message.as_bytes()).decode('utf-8')
+
+
 def cmd_list(args) -> int:
     """List emails matching query."""
     service = authenticate()
 
-    query = args.query or ''
-    limit = args.limit or 10
-
     results = service.users().messages().list(
         userId='me',
-        q=query,
-        maxResults=limit
+        q=args.query or '',
+        maxResults=args.limit
     ).execute()
 
     messages = results.get('messages', [])
-
     if not messages:
         print('No messages found.')
         return 0
@@ -93,7 +114,6 @@ def cmd_list(args) -> int:
         ).execute()
 
         headers = msg_data.get('payload', {}).get('headers', [])
-
         print(f"[{i}] ID: {msg['id']}")
         print(f"    From: {get_header(headers, 'From')}")
         print(f"    Subject: {get_header(headers, 'Subject')}")
@@ -107,16 +127,16 @@ def cmd_read(args) -> int:
     """Read full email content."""
     service = authenticate()
 
-    message_ids = args.ids
-
-    # If query mode, fetch IDs first
+    # Get message IDs from args or query
     if args.query:
         results = service.users().messages().list(
             userId='me',
             q=args.query,
-            maxResults=args.limit or 10
+            maxResults=args.limit
         ).execute()
         message_ids = [m['id'] for m in results.get('messages', [])]
+    else:
+        message_ids = args.ids
 
     if not message_ids:
         print('No messages found.')
@@ -133,7 +153,6 @@ def cmd_read(args) -> int:
         ).execute()
 
         headers = msg.get('payload', {}).get('headers', [])
-
         print(f"Message-ID: {msg['id']}")
         print(f"Thread-ID: {msg['threadId']}")
         print(f"From: {get_header(headers, 'From')}")
@@ -150,22 +169,17 @@ def cmd_read(args) -> int:
 
 def cmd_send(args) -> int:
     """Send a new email or create a draft."""
-    service = authenticate()
-
-    # Get body from args or file
-    if args.file:
-        body = Path(args.file).read_text()
-    elif args.body:
-        body = args.body
-    else:
+    body = get_body_content(args)
+    if not body:
         print('Error: --body or --file required')
         return 1
+
+    service = authenticate()
 
     message = MIMEText(body)
     message['To'] = args.to
     message['Subject'] = args.subject or ''
-
-    raw = base64.urlsafe_b64encode(message.as_bytes()).decode('utf-8')
+    raw = encode_message(message)
 
     if args.draft:
         result = service.users().drafts().create(
@@ -190,6 +204,11 @@ def cmd_send(args) -> int:
 
 def cmd_reply(args) -> int:
     """Reply to an existing email or create a draft reply."""
+    body = get_body_content(args)
+    if not body:
+        print('Error: --body or --file required')
+        return 1
+
     service = authenticate()
 
     # Fetch original message for threading info
@@ -211,22 +230,12 @@ def cmd_reply(args) -> int:
     if not subject.lower().startswith('re:'):
         subject = f'Re: {subject}'
 
-    # Get body
-    if args.file:
-        body = Path(args.file).read_text()
-    elif args.body:
-        body = args.body
-    else:
-        print('Error: --body or --file required')
-        return 1
-
     message = MIMEText(body)
     message['To'] = original_from
     message['Subject'] = subject
     message['In-Reply-To'] = original_message_id
     message['References'] = original_message_id
-
-    raw = base64.urlsafe_b64encode(message.as_bytes()).decode('utf-8')
+    raw = encode_message(message)
 
     if args.draft:
         result = service.users().drafts().create(
