@@ -180,6 +180,58 @@ def cmd_send(args) -> int:
     return 0
 
 
+def cmd_reply(args) -> int:
+    """Reply to an existing email."""
+    service = authenticate()
+
+    # Fetch original message for threading info
+    original = service.users().messages().get(
+        userId='me',
+        id=args.message_id,
+        format='metadata',
+        metadataHeaders=['From', 'Subject', 'Message-ID']
+    ).execute()
+
+    headers = original.get('payload', {}).get('headers', [])
+    original_from = get_header(headers, 'From')
+    original_subject = get_header(headers, 'Subject')
+    original_message_id = get_header(headers, 'Message-ID')
+    thread_id = original['threadId']
+
+    # Build reply subject
+    subject = original_subject
+    if not subject.lower().startswith('re:'):
+        subject = f'Re: {subject}'
+
+    # Get body
+    if args.file:
+        body = Path(args.file).read_text()
+    elif args.body:
+        body = args.body
+    else:
+        print('Error: --body or --file required')
+        return 1
+
+    message = MIMEText(body)
+    message['To'] = original_from
+    message['Subject'] = subject
+    message['In-Reply-To'] = original_message_id
+    message['References'] = original_message_id
+
+    raw = base64.urlsafe_b64encode(message.as_bytes()).decode('utf-8')
+
+    result = service.users().messages().send(
+        userId='me',
+        body={'raw': raw, 'threadId': thread_id}
+    ).execute()
+
+    print('Reply sent successfully.')
+    print(f"Message-ID: {result['id']}")
+    print(f"Thread-ID: {result['threadId']}")
+
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description='Gmail CLI - Read, send, and reply to emails'
@@ -208,6 +260,13 @@ def main() -> int:
     send_parser.add_argument('--body', '-b', help='Email body text')
     send_parser.add_argument('--file', '-f', help='Read body from file')
     send_parser.set_defaults(func=cmd_send)
+
+    # reply command
+    reply_parser = subparsers.add_parser('reply', help='Reply to an email')
+    reply_parser.add_argument('message_id', help='Message ID to reply to')
+    reply_parser.add_argument('--body', '-b', help='Reply body text')
+    reply_parser.add_argument('--file', '-f', help='Read body from file')
+    reply_parser.set_defaults(func=cmd_reply)
 
     args = parser.parse_args()
     return args.func(args)
