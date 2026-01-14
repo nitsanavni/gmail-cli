@@ -5,6 +5,8 @@ import argparse
 import base64
 import sys
 from datetime import datetime
+from email.mime.text import MIMEText
+from pathlib import Path
 
 from auth import authenticate
 from html_to_markdown import convert_to_markdown
@@ -146,6 +148,38 @@ def cmd_read(args) -> int:
     return 0
 
 
+def cmd_send(args) -> int:
+    """Send a new email."""
+    service = authenticate()
+
+    # Get body from args or file
+    if args.file:
+        body = Path(args.file).read_text()
+    elif args.body:
+        body = args.body
+    else:
+        print('Error: --body or --file required')
+        return 1
+
+    message = MIMEText(body)
+    message['To'] = args.to
+    message['Subject'] = args.subject or ''
+
+    raw = base64.urlsafe_b64encode(message.as_bytes()).decode('utf-8')
+
+    result = service.users().messages().send(
+        userId='me',
+        body={'raw': raw}
+    ).execute()
+
+    print('Message sent successfully.')
+    print(f"Message-ID: {result['id']}")
+    if 'threadId' in result:
+        print(f"Thread-ID: {result['threadId']}")
+
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description='Gmail CLI - Read, send, and reply to emails'
@@ -166,6 +200,14 @@ def main() -> int:
     read_parser.add_argument('--limit', '-n', type=int, default=10,
                             help='Max messages when using query (default: 10)')
     read_parser.set_defaults(func=cmd_read)
+
+    # send command
+    send_parser = subparsers.add_parser('send', help='Send an email')
+    send_parser.add_argument('--to', required=True, help='Recipient email')
+    send_parser.add_argument('--subject', '-s', help='Email subject')
+    send_parser.add_argument('--body', '-b', help='Email body text')
+    send_parser.add_argument('--file', '-f', help='Read body from file')
+    send_parser.set_defaults(func=cmd_send)
 
     args = parser.parse_args()
     return args.func(args)
