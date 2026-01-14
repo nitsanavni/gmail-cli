@@ -48,6 +48,9 @@ uv run gmail_cli.py send --to "user@example.com" --subject "Hello" --body "Messa
 
 # From file
 uv run gmail_cli.py send --to "user@example.com" --subject "Update" --file message.md
+
+# Create draft instead of sending
+uv run gmail_cli.py send --to "user@example.com" --subject "Hello" --body "Message" --draft
 ```
 
 ### Reply to email
@@ -58,6 +61,9 @@ uv run gmail_cli.py reply abc123def --body "Thanks for your message!"
 
 # Reply from file
 uv run gmail_cli.py reply abc123def --file response.md
+
+# Create draft reply instead of sending
+uv run gmail_cli.py reply abc123def --body "Thanks!" --draft
 ```
 
 ## Gmail Query Syntax
