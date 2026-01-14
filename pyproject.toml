@@ -1,0 +1,14 @@
+[project]
+name = "gmail-cli"
+version = "0.1.0"
+description = "CLI tool for reading, sending, and replying to Gmail - designed for Claude Code"
+requires-python = ">=3.10"
+dependencies = [
+    "google-api-python-client>=2.100.0",
+    "google-auth>=2.22.0",
+    "google-auth-oauthlib>=1.0.0",
+    "html-to-markdown>=1.3.2",
+]
+
+[project.scripts]
+gmail-cli = "gmail_cli:main"
