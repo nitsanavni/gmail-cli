@@ -61,7 +61,7 @@ def resolve_account(account: str | None) -> str | None:
         if accounts:
             print_available_accounts(accounts)
         else:
-            print('No accounts configured. Run: gmail-cli accounts add', file=sys.stderr)
+            print('No accounts configured. Run: uv run gmail_cli.py accounts add', file=sys.stderr)
         sys.exit(1)
 
     # No account specified - check environment variable
@@ -161,6 +161,11 @@ def authenticate(account: str | None = None) -> Any:
     if not (creds and creds.valid):
         refreshed = creds and refresh_credentials(email, creds)
         if not refreshed:
-            creds, _ = run_oauth_flow()
+            creds, new_email = run_oauth_flow()
+            if new_email != email:
+                print(
+                    f"Warning: Expected {email}, authenticated as {new_email}",
+                    file=sys.stderr
+                )
 
     return build('gmail', 'v1', credentials=creds)
