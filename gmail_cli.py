@@ -182,6 +182,8 @@ def cmd_send(args) -> int:
     message = MIMEText(body)
     message['To'] = args.to
     message['Subject'] = args.subject or ''
+    if args.bcc:
+        message['Bcc'] = args.bcc
     raw = encode_message(message)
 
     if args.draft:
@@ -290,6 +292,7 @@ def main() -> int:
     send_parser.add_argument('--file', '-f', help='Read body from file')
     send_parser.add_argument('--draft', '-d', action='store_true',
                             help='Create draft instead of sending')
+    send_parser.add_argument('--bcc', help='BCC recipient email')
     send_parser.set_defaults(func=cmd_send)
 
     # reply command
