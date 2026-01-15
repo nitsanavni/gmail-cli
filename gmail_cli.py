@@ -3,12 +3,13 @@
 
 import argparse
 import base64
+import os
 import sys
 from datetime import datetime
 from email.mime.text import MIMEText
 from pathlib import Path
 
-from auth import authenticate
+from auth import authenticate, get_token_path, list_accounts, run_oauth_flow
 from html_to_markdown import convert_to_markdown
 
 
@@ -90,7 +91,7 @@ def encode_message(message: MIMEText) -> str:
 
 def cmd_list(args) -> int:
     """List emails matching query."""
-    service = authenticate()
+    service = authenticate(args.account)
 
     results = service.users().messages().list(
         userId='me',
@@ -125,7 +126,7 @@ def cmd_list(args) -> int:
 
 def cmd_read(args) -> int:
     """Read full email content."""
-    service = authenticate()
+    service = authenticate(args.account)
 
     # Get message IDs from args or query
     if args.query:
@@ -177,7 +178,7 @@ def cmd_send(args) -> int:
         print('Error: --body or --file required')
         return 1
 
-    service = authenticate()
+    service = authenticate(args.account)
 
     message = MIMEText(body)
     message['To'] = args.to
@@ -214,7 +215,7 @@ def cmd_reply(args) -> int:
         print('Error: --body or --file required')
         return 1
 
-    service = authenticate()
+    service = authenticate(args.account)
 
     # Fetch original message for threading info
     original = service.users().messages().get(
@@ -265,10 +266,70 @@ def cmd_reply(args) -> int:
     return 0
 
 
+def cmd_accounts(args) -> int:
+    """List or manage Gmail accounts."""
+    if args.accounts_action:
+        return args.accounts_func(args)
+    return cmd_accounts_list(args)
+
+
+def cmd_accounts_list(args) -> int:
+    """List all authenticated accounts."""
+    accounts = list_accounts()
+    default = os.environ.get('GMAIL_CLI_ACCOUNT')
+
+    if not accounts:
+        print('No accounts configured.')
+        print('Run: uv run gmail_cli.py accounts add')
+        return 0
+
+    print('Available accounts:')
+    for email in accounts:
+        marker = '*' if email == default else ' '
+        print(f'  {marker} {email}')
+
+    if default and default not in accounts:
+        print(f"\nWarning: GMAIL_CLI_ACCOUNT='{default}' not found")
+
+    return 0
+
+
+def cmd_accounts_add(args) -> int:
+    """Add new account via OAuth flow."""
+    print('Opening browser for authentication...')
+    run_oauth_flow()
+    return 0
+
+
+def cmd_accounts_remove(args) -> int:
+    """Remove account token file."""
+    accounts = list_accounts()
+
+    if args.email not in accounts:
+        print(f"Error: Account '{args.email}' not found")
+        if accounts:
+            print('Available accounts:')
+            for email in accounts:
+                print(f'  - {email}')
+        return 1
+
+    token_path = get_token_path(args.email)
+    token_path.unlink()
+    print(f'Removed account: {args.email}')
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description='Gmail CLI - Read, send, and reply to emails'
     )
+
+    # Global account flag
+    parser.add_argument(
+        '--account', '-a',
+        help='Email account to use (e.g., user@example.com)'
+    )
+
     subparsers = parser.add_subparsers(dest='command', required=True)
 
     # list command
@@ -306,6 +367,26 @@ def main() -> int:
                             help='Create draft instead of sending')
     reply_parser.add_argument('--bcc', help='BCC recipient email')
     reply_parser.set_defaults(func=cmd_reply)
+
+    # accounts command
+    accounts_parser = subparsers.add_parser('accounts', help='Manage Gmail accounts')
+    accounts_parser.set_defaults(func=cmd_accounts)
+    accounts_subparsers = accounts_parser.add_subparsers(dest='accounts_action')
+
+    # accounts list
+    accounts_subparsers.add_parser(
+        'list', help='List accounts'
+    ).set_defaults(accounts_func=cmd_accounts_list)
+
+    # accounts add
+    accounts_subparsers.add_parser(
+        'add', help='Add new account'
+    ).set_defaults(accounts_func=cmd_accounts_add)
+
+    # accounts remove
+    remove_parser = accounts_subparsers.add_parser('remove', help='Remove account')
+    remove_parser.add_argument('email', help='Email address to remove')
+    remove_parser.set_defaults(accounts_func=cmd_accounts_remove)
 
     args = parser.parse_args()
     return args.func(args)
