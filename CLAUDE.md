@@ -5,6 +5,15 @@ CLI tool for reading, sending, and replying to Gmail emails. Designed for Claude
 ## Commands
 
 ```bash
+# Account management
+uv run gmail_cli.py accounts              # List configured accounts
+uv run gmail_cli.py accounts add          # Add new account (OAuth flow)
+uv run gmail_cli.py accounts remove EMAIL # Remove account
+
+# Use specific account (add --account/-a before any command)
+uv run gmail_cli.py --account user@example.com list
+uv run gmail_cli.py -a work@company.com send --to ...
+
 # List emails
 uv run gmail_cli.py list --query "from:user@example.com" --limit 10
 
@@ -28,7 +37,13 @@ uv run gmail_cli.py reply <message-id> --body "Reply text" --bcc "hidden@example
 
 1. Copy `credentials.json` from gmail_to_md or create new OAuth credentials
 2. First run will prompt for OAuth authorization
-3. Token saved to `token.json`
+3. Token saved to `token-{email}.json` (e.g., `token-user@example.com.json`)
+
+## Multi-Account
+
+- Tokens are stored as `token-{email}.json` for each authenticated account
+- If only one account exists, it's used automatically
+- With multiple accounts, use `--account` or set `GMAIL_CLI_ACCOUNT` env var
 
 ## Scopes
 
