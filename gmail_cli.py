@@ -157,6 +157,9 @@ def cmd_read(args) -> int:
         print(f"Thread-ID: {msg['threadId']}")
         print(f"From: {get_header(headers, 'From')}")
         print(f"To: {get_header(headers, 'To')}")
+        bcc = get_header(headers, 'Bcc')
+        if bcc:
+            print(f"Bcc: {bcc}")
         print(f"Subject: {get_header(headers, 'Subject')}")
         print(f"Date: {format_date(msg.get('internalDate', '0'))}")
         print('\n---\n')
