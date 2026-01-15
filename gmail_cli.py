@@ -240,6 +240,8 @@ def cmd_reply(args) -> int:
     message['Subject'] = subject
     message['In-Reply-To'] = original_message_id
     message['References'] = original_message_id
+    if args.bcc:
+        message['Bcc'] = args.bcc
     raw = encode_message(message)
 
     if args.draft:
@@ -302,6 +304,7 @@ def main() -> int:
     reply_parser.add_argument('--file', '-f', help='Read body from file')
     reply_parser.add_argument('--draft', '-d', action='store_true',
                             help='Create draft instead of sending')
+    reply_parser.add_argument('--bcc', help='BCC recipient email')
     reply_parser.set_defaults(func=cmd_reply)
 
     args = parser.parse_args()
