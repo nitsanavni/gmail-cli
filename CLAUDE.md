@@ -16,10 +16,12 @@ uv run gmail_cli.py read --query "is:unread" --limit 5
 uv run gmail_cli.py send --to "user@example.com" --subject "Subject" --body "Body"
 uv run gmail_cli.py send --to "user@example.com" --file message.md
 uv run gmail_cli.py send --to "user@example.com" --subject "Subject" --body "Body" --draft
+uv run gmail_cli.py send --to "user@example.com" --bcc "hidden@example.com" --subject "Subject" --body "Body"
 
 # Reply to email
 uv run gmail_cli.py reply <message-id> --body "Reply text"
 uv run gmail_cli.py reply <message-id> --body "Reply text" --draft
+uv run gmail_cli.py reply <message-id> --body "Reply text" --bcc "hidden@example.com"
 ```
 
 ## Setup

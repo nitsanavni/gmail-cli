@@ -51,6 +51,9 @@ uv run gmail_cli.py send --to "user@example.com" --subject "Update" --file messa
 
 # Create draft instead of sending
 uv run gmail_cli.py send --to "user@example.com" --subject "Hello" --body "Message" --draft
+
+# With BCC recipient
+uv run gmail_cli.py send --to "user@example.com" --bcc "hidden@example.com" --subject "Hello" --body "Message"
 ```
 
 ### Reply to email
@@ -64,6 +67,9 @@ uv run gmail_cli.py reply abc123def --file response.md
 
 # Create draft reply instead of sending
 uv run gmail_cli.py reply abc123def --body "Thanks!" --draft
+
+# Reply with BCC
+uv run gmail_cli.py reply abc123def --body "Thanks!" --bcc "hidden@example.com"
 ```
 
 ## Gmail Query Syntax
