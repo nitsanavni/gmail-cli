@@ -1,12 +1,11 @@
 """Command handlers for Gmail CLI."""
 
 import base64
-import os
 from datetime import datetime
 from email.mime.text import MIMEText
 from pathlib import Path
 
-from auth import authenticate, get_token_path, list_accounts, run_oauth_flow
+from auth import authenticate
 from html_to_markdown import convert_to_markdown
 
 
@@ -270,60 +269,3 @@ def cmd_reply(args) -> int:
     return 0
 
 
-def cmd_accounts(args) -> int:
-    """List or manage Gmail accounts."""
-    if args.accounts_action:
-        return args.accounts_func(args)
-    return cmd_accounts_list(args)
-
-
-def cmd_accounts_list(args) -> int:
-    """List all authenticated accounts."""
-    accounts = list_accounts()
-    default = os.environ.get('GMAIL_CLI_ACCOUNT')
-
-    if not accounts:
-        print('No accounts configured.')
-        print('Run: uv run gmail_cli.py accounts add')
-        return 0
-
-    print('Available accounts:')
-    for email in accounts:
-        marker = '*' if email == default else ' '
-        print(f'  {marker} {email}')
-
-    if default and default not in accounts:
-        print(f"\nWarning: GMAIL_CLI_ACCOUNT='{default}' not found")
-
-    return 0
-
-
-def cmd_accounts_add(args) -> int:
-    """Add new account via OAuth flow."""
-    print('Opening browser for authentication...')
-    run_oauth_flow()
-    return 0
-
-
-def cmd_accounts_remove(args) -> int:
-    """Remove account token file."""
-    accounts = list_accounts()
-
-    if args.email not in accounts:
-        print(f"Error: Account '{args.email}' not found")
-        if accounts:
-            print('Available accounts:')
-            for email in accounts:
-                print(f'  - {email}')
-        return 1
-
-    if not args.yes:
-        response = input(f"Remove account '{args.email}'? [y/N] ").strip().lower()
-        if response != 'y':
-            print('Aborted.')
-            return 0
-
-    token_path = get_token_path(args.email)
-    token_path.unlink()
-    print(f'Removed account: {args.email}')
-    return 0

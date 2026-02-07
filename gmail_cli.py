@@ -4,16 +4,13 @@
 import argparse
 import sys
 
-from commands import (
+from account_commands import (
     cmd_accounts,
     cmd_accounts_add,
     cmd_accounts_list,
     cmd_accounts_remove,
-    cmd_list,
-    cmd_read,
-    cmd_reply,
-    cmd_send,
 )
+from commands import cmd_list, cmd_read, cmd_reply, cmd_send
 
 
 def main() -> int:
