@@ -26,6 +26,7 @@ uv run gmail_cli.py send --to "user@example.com" --subject "Subject" --body "Bod
 uv run gmail_cli.py send --to "user@example.com" --file message.md
 uv run gmail_cli.py send --to "user@example.com" --subject "Subject" --body "Body" --draft
 uv run gmail_cli.py send --to "user@example.com" --cc "cc@example.com" --subject "Subject" --body "Body"
+uv run gmail_cli.py send --to "user@example.com" --cc "a@example.com" --cc "b@example.com" --subject "Subject" --body "Body"
 uv run gmail_cli.py send --to "user@example.com" --bcc "hidden@example.com" --subject "Subject" --body "Body"
 
 # Reply to email

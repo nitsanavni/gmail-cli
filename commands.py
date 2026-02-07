@@ -83,9 +83,9 @@ def get_body_content(args) -> str | None:
 def set_optional_recipients(message: MIMEText, args) -> None:
     """Set CC and BCC headers on a message if provided in args."""
     if args.cc:
-        message['Cc'] = args.cc
+        message['Cc'] = ', '.join(args.cc)
     if args.bcc:
-        message['Bcc'] = args.bcc
+        message['Bcc'] = ', '.join(args.bcc)
 
 
 def encode_message(message: MIMEText) -> str:

@@ -49,8 +49,8 @@ def main() -> int:
     send_parser.add_argument('--file', '-f', help='Read body from file')
     send_parser.add_argument('--draft', '-d', action='store_true',
                             help='Create draft instead of sending')
-    send_parser.add_argument('--cc', help='CC recipient email')
-    send_parser.add_argument('--bcc', help='BCC recipient email')
+    send_parser.add_argument('--cc', action='append', help='CC recipient (repeatable)')
+    send_parser.add_argument('--bcc', action='append', help='BCC recipient (repeatable)')
     send_parser.set_defaults(func=cmd_send)
 
     # reply command
@@ -60,8 +60,8 @@ def main() -> int:
     reply_parser.add_argument('--file', '-f', help='Read body from file')
     reply_parser.add_argument('--draft', '-d', action='store_true',
                             help='Create draft instead of sending')
-    reply_parser.add_argument('--cc', help='CC recipient email')
-    reply_parser.add_argument('--bcc', help='BCC recipient email')
+    reply_parser.add_argument('--cc', action='append', help='CC recipient (repeatable)')
+    reply_parser.add_argument('--bcc', action='append', help='BCC recipient (repeatable)')
     reply_parser.set_defaults(func=cmd_reply)
 
     # accounts command
