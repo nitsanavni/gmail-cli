@@ -1,5 +1,6 @@
 """Command handlers for Gmail CLI."""
 
+import argparse
 import base64
 from datetime import datetime
 from email.mime.text import MIMEText
@@ -80,7 +81,7 @@ def get_body_content(args) -> str | None:
     return None
 
 
-def set_optional_recipients(message: MIMEText, args) -> None:
+def set_optional_recipients(message: MIMEText, args: argparse.Namespace) -> None:
     """Set CC and BCC headers on a message if provided in args."""
     if args.cc:
         message['Cc'] = ', '.join(args.cc)
