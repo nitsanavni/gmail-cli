@@ -72,7 +72,7 @@ def get_body(payload: dict) -> str:
     return ''
 
 
-def get_body_content(args) -> str | None:
+def get_body_content(args: argparse.Namespace) -> str | None:
     """Get message body from args (--body or --file)."""
     if args.file:
         return Path(args.file).read_text()
@@ -94,7 +94,7 @@ def encode_message(message: MIMEText) -> str:
     return base64.urlsafe_b64encode(message.as_bytes()).decode('utf-8')
 
 
-def cmd_list(args) -> int:
+def cmd_list(args: argparse.Namespace) -> int:
     """List emails matching query."""
     service = authenticate(args.account)
 
@@ -129,7 +129,7 @@ def cmd_list(args) -> int:
     return 0
 
 
-def cmd_read(args) -> int:
+def cmd_read(args: argparse.Namespace) -> int:
     """Read full email content."""
     service = authenticate(args.account)
 
@@ -177,7 +177,7 @@ def cmd_read(args) -> int:
     return 0
 
 
-def cmd_send(args) -> int:
+def cmd_send(args: argparse.Namespace) -> int:
     """Send a new email or create a draft."""
     body = get_body_content(args)
     if not body:
@@ -213,7 +213,7 @@ def cmd_send(args) -> int:
     return 0
 
 
-def cmd_reply(args) -> int:
+def cmd_reply(args: argparse.Namespace) -> int:
     """Reply to an existing email or create a draft reply."""
     body = get_body_content(args)
     if not body:
@@ -268,5 +268,3 @@ def cmd_reply(args) -> int:
         print(f"Thread-ID: {result['threadId']}")
 
     return 0
-
-

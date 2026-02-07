@@ -1,18 +1,19 @@
 """Account management command handlers for Gmail CLI."""
 
+import argparse
 import os
 
 from auth import get_token_path, list_accounts, run_oauth_flow
 
 
-def cmd_accounts(args) -> int:
+def cmd_accounts(args: argparse.Namespace) -> int:
     """List or manage Gmail accounts."""
     if args.accounts_action:
         return args.accounts_func(args)
     return cmd_accounts_list(args)
 
 
-def cmd_accounts_list(args) -> int:
+def cmd_accounts_list(args: argparse.Namespace) -> int:
     """List all authenticated accounts."""
     accounts = list_accounts()
     default = os.environ.get('GMAIL_CLI_ACCOUNT')
@@ -33,14 +34,14 @@ def cmd_accounts_list(args) -> int:
     return 0
 
 
-def cmd_accounts_add(args) -> int:
+def cmd_accounts_add(args: argparse.Namespace) -> int:
     """Add new account via OAuth flow."""
     print('Opening browser for authentication...')
     run_oauth_flow()
     return 0
 
 
-def cmd_accounts_remove(args) -> int:
+def cmd_accounts_remove(args: argparse.Namespace) -> int:
     """Remove account token file."""
     accounts = list_accounts()
 
