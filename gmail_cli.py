@@ -13,6 +13,16 @@ from account_commands import (
 from commands import cmd_list, cmd_read, cmd_reply, cmd_send
 
 
+def add_compose_args(parser: argparse.ArgumentParser) -> None:
+    """Add shared compose arguments (body, file, draft, cc, bcc) to a parser."""
+    parser.add_argument('--body', '-b', help='Email body text')
+    parser.add_argument('--file', '-f', help='Read body from file')
+    parser.add_argument('--draft', '-d', action='store_true',
+                        help='Create draft instead of sending')
+    parser.add_argument('--cc', action='append', help='CC recipient (repeatable)')
+    parser.add_argument('--bcc', action='append', help='BCC recipient (repeatable)')
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description='Gmail CLI - Read, send, and reply to emails'
@@ -45,23 +55,13 @@ def main() -> int:
     send_parser = subparsers.add_parser('send', help='Send an email')
     send_parser.add_argument('--to', required=True, help='Recipient email')
     send_parser.add_argument('--subject', '-s', help='Email subject')
-    send_parser.add_argument('--body', '-b', help='Email body text')
-    send_parser.add_argument('--file', '-f', help='Read body from file')
-    send_parser.add_argument('--draft', '-d', action='store_true',
-                            help='Create draft instead of sending')
-    send_parser.add_argument('--cc', action='append', help='CC recipient (repeatable)')
-    send_parser.add_argument('--bcc', action='append', help='BCC recipient (repeatable)')
+    add_compose_args(send_parser)
     send_parser.set_defaults(func=cmd_send)
 
     # reply command
     reply_parser = subparsers.add_parser('reply', help='Reply to an email')
     reply_parser.add_argument('message_id', help='Message ID to reply to')
-    reply_parser.add_argument('--body', '-b', help='Reply body text')
-    reply_parser.add_argument('--file', '-f', help='Read body from file')
-    reply_parser.add_argument('--draft', '-d', action='store_true',
-                            help='Create draft instead of sending')
-    reply_parser.add_argument('--cc', action='append', help='CC recipient (repeatable)')
-    reply_parser.add_argument('--bcc', action='append', help='BCC recipient (repeatable)')
+    add_compose_args(reply_parser)
     reply_parser.set_defaults(func=cmd_reply)
 
     # accounts command
