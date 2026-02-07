@@ -155,6 +155,9 @@ def cmd_read(args) -> int:
         print(f"Thread-ID: {msg['threadId']}")
         print(f"From: {get_header(headers, 'From')}")
         print(f"To: {get_header(headers, 'To')}")
+        cc = get_header(headers, 'Cc')
+        if cc:
+            print(f"Cc: {cc}")
         bcc = get_header(headers, 'Bcc')
         if bcc:
             print(f"Bcc: {bcc}")
@@ -180,6 +183,8 @@ def cmd_send(args) -> int:
     message = MIMEText(body)
     message['To'] = args.to
     message['Subject'] = args.subject or ''
+    if args.cc:
+        message['Cc'] = args.cc
     if args.bcc:
         message['Bcc'] = args.bcc
     raw = encode_message(message)
@@ -238,6 +243,8 @@ def cmd_reply(args) -> int:
     message['Subject'] = subject
     message['In-Reply-To'] = original_message_id
     message['References'] = original_message_id
+    if args.cc:
+        message['Cc'] = args.cc
     if args.bcc:
         message['Bcc'] = args.bcc
     raw = encode_message(message)
