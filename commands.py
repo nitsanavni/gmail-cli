@@ -81,6 +81,14 @@ def get_body_content(args) -> str | None:
     return None
 
 
+def set_optional_recipients(message: MIMEText, args) -> None:
+    """Set CC and BCC headers on a message if provided in args."""
+    if args.cc:
+        message['Cc'] = args.cc
+    if args.bcc:
+        message['Bcc'] = args.bcc
+
+
 def encode_message(message: MIMEText) -> str:
     """Encode a MIMEText message for Gmail API."""
     return base64.urlsafe_b64encode(message.as_bytes()).decode('utf-8')
@@ -155,12 +163,10 @@ def cmd_read(args) -> int:
         print(f"Thread-ID: {msg['threadId']}")
         print(f"From: {get_header(headers, 'From')}")
         print(f"To: {get_header(headers, 'To')}")
-        cc = get_header(headers, 'Cc')
-        if cc:
-            print(f"Cc: {cc}")
-        bcc = get_header(headers, 'Bcc')
-        if bcc:
-            print(f"Bcc: {bcc}")
+        for header_name in ('Cc', 'Bcc'):
+            value = get_header(headers, header_name)
+            if value:
+                print(f"{header_name}: {value}")
         print(f"Subject: {get_header(headers, 'Subject')}")
         print(f"Date: {format_date(msg.get('internalDate', '0'))}")
         print('\n---\n')
@@ -183,10 +189,7 @@ def cmd_send(args) -> int:
     message = MIMEText(body)
     message['To'] = args.to
     message['Subject'] = args.subject or ''
-    if args.cc:
-        message['Cc'] = args.cc
-    if args.bcc:
-        message['Bcc'] = args.bcc
+    set_optional_recipients(message, args)
     raw = encode_message(message)
 
     if args.draft:
@@ -243,10 +246,7 @@ def cmd_reply(args) -> int:
     message['Subject'] = subject
     message['In-Reply-To'] = original_message_id
     message['References'] = original_message_id
-    if args.cc:
-        message['Cc'] = args.cc
-    if args.bcc:
-        message['Bcc'] = args.bcc
+    set_optional_recipients(message, args)
     raw = encode_message(message)
 
     if args.draft:
