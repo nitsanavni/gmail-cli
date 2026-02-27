@@ -14,6 +14,7 @@ from googleapiclient.discovery import build
 SCOPES = [
     'https://www.googleapis.com/auth/gmail.readonly',
     'https://www.googleapis.com/auth/gmail.compose',
+    'https://www.googleapis.com/auth/gmail.modify',
 ]
 
 BASE_DIR = Path(__file__).parent

@@ -7,7 +7,7 @@ from email.mime.text import MIMEText
 from pathlib import Path
 
 from auth import authenticate
-from html_to_markdown import convert_to_markdown
+from markdownify import markdownify as convert_to_markdown
 
 
 def format_date(timestamp_ms: str) -> str:
@@ -209,6 +209,21 @@ def cmd_send(args: argparse.Namespace) -> int:
         print(f"Message-ID: {result['id']}")
         if 'threadId' in result:
             print(f"Thread-ID: {result['threadId']}")
+
+    return 0
+
+
+def cmd_archive(args: argparse.Namespace) -> int:
+    """Archive emails by removing the INBOX label."""
+    service = authenticate(args.account)
+
+    for msg_id in args.ids:
+        service.users().messages().modify(
+            userId='me',
+            id=msg_id,
+            body={'removeLabelIds': ['INBOX']}
+        ).execute()
+        print(f'Archived: {msg_id}')
 
     return 0
 
