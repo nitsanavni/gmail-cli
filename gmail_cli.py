@@ -21,6 +21,7 @@ def add_compose_args(parser: argparse.ArgumentParser) -> None:
                         help='Create draft instead of sending')
     parser.add_argument('--cc', action='append', help='CC recipient (repeatable)')
     parser.add_argument('--bcc', action='append', help='BCC recipient (repeatable)')
+    parser.add_argument('--attach', action='append', help='File to attach (repeatable)')
 
 
 def main() -> int:

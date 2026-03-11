@@ -2,7 +2,11 @@
 
 import argparse
 import base64
+import mimetypes
 from datetime import datetime
+from email import encoders
+from email.mime.base import MIMEBase
+from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from pathlib import Path
 
@@ -89,8 +93,32 @@ def set_optional_recipients(message: MIMEText, args: argparse.Namespace) -> None
         message['Bcc'] = ', '.join(args.bcc)
 
 
+def build_message(body: str, attachments: list[str] | None) -> MIMEText | MIMEMultipart:
+    """Build a MIME message, with attachments if provided."""
+    if not attachments:
+        return MIMEText(body)
+
+    msg = MIMEMultipart()
+    msg.attach(MIMEText(body))
+
+    for filepath in attachments:
+        path = Path(filepath)
+        content_type, _ = mimetypes.guess_type(str(path))
+        if content_type is None:
+            content_type = 'application/octet-stream'
+        maintype, subtype = content_type.split('/', 1)
+
+        part = MIMEBase(maintype, subtype)
+        part.set_payload(path.read_bytes())
+        encoders.encode_base64(part)
+        part.add_header('Content-Disposition', 'attachment', filename=path.name)
+        msg.attach(part)
+
+    return msg
+
+
 def encode_message(message: MIMEText) -> str:
-    """Encode a MIMEText message for Gmail API."""
+    """Encode a MIME message for Gmail API."""
     return base64.urlsafe_b64encode(message.as_bytes()).decode('utf-8')
 
 
@@ -186,7 +214,7 @@ def cmd_send(args: argparse.Namespace) -> int:
 
     service = authenticate(args.account)
 
-    message = MIMEText(body)
+    message = build_message(body, args.attach)
     message['To'] = args.to
     message['Subject'] = args.subject or ''
     set_optional_recipients(message, args)
@@ -241,7 +269,7 @@ def cmd_reply(args: argparse.Namespace) -> int:
     if not subject.lower().startswith('re:'):
         subject = f'Re: {subject}'
 
-    message = MIMEText(body)
+    message = build_message(body, args.attach)
     message['To'] = original_from
     message['Subject'] = subject
     message['In-Reply-To'] = original_message_id
