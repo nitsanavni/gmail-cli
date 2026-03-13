@@ -11,7 +11,7 @@ from email.mime.text import MIMEText
 from pathlib import Path
 
 from auth import authenticate
-from markdownify import markdownify as convert_to_markdown
+from html_to_markdown import convert_to_markdown
 
 
 def format_date(timestamp_ms: str) -> str:
