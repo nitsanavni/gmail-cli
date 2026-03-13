@@ -10,7 +10,7 @@ from account_commands import (
     cmd_accounts_list,
     cmd_accounts_remove,
 )
-from commands import cmd_attachments, cmd_list, cmd_read, cmd_reply, cmd_send
+from commands import cmd_archive, cmd_attachments, cmd_list, cmd_read, cmd_reply, cmd_send
 
 
 def add_compose_args(parser: argparse.ArgumentParser) -> None:
@@ -70,6 +70,11 @@ def main() -> int:
     attach_parser.add_argument('id', help='Message ID')
     attach_parser.add_argument('--output', '-o', help='Output directory (default: current)')
     attach_parser.set_defaults(func=cmd_attachments)
+
+    # archive command
+    archive_parser = subparsers.add_parser('archive', help='Archive emails')
+    archive_parser.add_argument('ids', nargs='+', help='Message IDs to archive')
+    archive_parser.set_defaults(func=cmd_archive)
 
     # accounts command
     accounts_parser = subparsers.add_parser('accounts', help='Manage Gmail accounts')
