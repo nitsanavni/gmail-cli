@@ -3,7 +3,7 @@
 import argparse
 import os
 
-from auth import get_token_path, list_accounts, run_oauth_flow
+from auth import get_token_path, list_accounts, resolve_account, run_oauth_flow
 
 
 def cmd_accounts(args: argparse.Namespace) -> int:
@@ -36,6 +36,22 @@ def cmd_accounts_list(args: argparse.Namespace) -> int:
 
 def cmd_accounts_add(args: argparse.Namespace) -> int:
     """Add new account via OAuth flow."""
+    print('Opening browser for authentication...')
+    run_oauth_flow()
+    return 0
+
+
+def cmd_accounts_reauth(args: argparse.Namespace) -> int:
+    """Re-authenticate an account (refresh expired/revoked tokens)."""
+    email = resolve_account(args.account)
+    if email is None:
+        print('No accounts configured. Use: gmail accounts add')
+        return 1
+
+    print(f'Re-authenticating {email}...')
+    token_path = get_token_path(email)
+    if token_path.exists():
+        token_path.unlink()
     print('Opening browser for authentication...')
     run_oauth_flow()
     return 0

@@ -114,7 +114,10 @@ def refresh_credentials(email: str, creds: Credentials) -> Credentials | None:
     if not (creds.expired and creds.refresh_token):
         return None
 
-    creds.refresh(Request())
+    try:
+        creds.refresh(Request())
+    except Exception:
+        return None
     save_token(email, creds)
     return creds
 

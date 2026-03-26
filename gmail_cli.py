@@ -8,6 +8,7 @@ from account_commands import (
     cmd_accounts,
     cmd_accounts_add,
     cmd_accounts_list,
+    cmd_accounts_reauth,
     cmd_accounts_remove,
 )
 from commands import cmd_archive, cmd_attachments, cmd_list, cmd_read, cmd_reply, cmd_send
@@ -90,6 +91,11 @@ def main() -> int:
     accounts_subparsers.add_parser(
         'add', help='Add new account'
     ).set_defaults(accounts_func=cmd_accounts_add)
+
+    # accounts reauth
+    accounts_subparsers.add_parser(
+        'reauth', help='Re-authenticate account (fix expired/revoked tokens)'
+    ).set_defaults(accounts_func=cmd_accounts_reauth)
 
     # accounts remove
     remove_parser = accounts_subparsers.add_parser('remove', help='Remove account')
