@@ -5,9 +5,11 @@ import base64
 import mimetypes
 from datetime import datetime
 from email import encoders
+from email.header import Header
 from email.mime.base import MIMEBase
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from email.utils import formataddr, parseaddr
 from pathlib import Path
 
 from auth import authenticate
@@ -319,8 +321,13 @@ def cmd_reply(args: argparse.Namespace) -> int:
     if not subject.lower().startswith('re:'):
         subject = f'Re: {subject}'
 
+    # Non-ASCII display names (e.g. "Ana Cañadas <a@b.com>") must be encoded
+    # separately from the address, or Gmail rejects the To header
+    name, addr = parseaddr(original_from)
+    reply_to = formataddr((str(Header(name, 'utf-8')), addr)) if name else addr
+
     message = build_message(body, args.attach)
-    message['To'] = original_from
+    message['To'] = reply_to
     message['Subject'] = subject
     message['In-Reply-To'] = original_message_id
     message['References'] = original_message_id
