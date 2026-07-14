@@ -54,7 +54,15 @@ uv run gmail_cli.py send --to "user@example.com" --subject "Hello" --body "Messa
 
 # With BCC recipient
 uv run gmail_cli.py send --to "user@example.com" --bcc "hidden@example.com" --subject "Hello" --body "Message"
+
+# With attachments (repeat --attach for more than one)
+uv run gmail_cli.py send --to "user@example.com" --subject "Report" --body "Attached" --attach report.pdf
+uv run gmail_cli.py send --to "user@example.com" --subject "Files" --body "Two" --attach a.pdf --attach b.png
 ```
+
+Gmail caps a message at 25MB. Attachments are base64-encoded, which adds
+roughly a third to each file's size, so the practical ceiling is lower than
+25MB of raw files.
 
 ### Reply to email
 
@@ -70,6 +78,9 @@ uv run gmail_cli.py reply abc123def --body "Thanks!" --draft
 
 # Reply with BCC
 uv run gmail_cli.py reply abc123def --body "Thanks!" --bcc "hidden@example.com"
+
+# Reply with an attachment
+uv run gmail_cli.py reply abc123def --body "Here it is" --attach report.pdf
 ```
 
 ### Archive emails

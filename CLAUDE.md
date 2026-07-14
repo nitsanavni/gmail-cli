@@ -28,15 +28,27 @@ uv run gmail_cli.py send --to "user@example.com" --subject "Subject" --body "Bod
 uv run gmail_cli.py send --to "user@example.com" --cc "cc@example.com" --subject "Subject" --body "Body"
 uv run gmail_cli.py send --to "user@example.com" --cc "a@example.com" --cc "b@example.com" --subject "Subject" --body "Body"
 uv run gmail_cli.py send --to "user@example.com" --bcc "hidden@example.com" --subject "Subject" --body "Body"
+uv run gmail_cli.py send --to "user@example.com" --subject "Subject" --body "Body" --attach report.pdf
+uv run gmail_cli.py send --to "user@example.com" --subject "Subject" --body "Body" --attach a.pdf --attach b.png
 
 # Reply to email
 uv run gmail_cli.py reply <message-id> --body "Reply text"
 uv run gmail_cli.py reply <message-id> --body "Reply text" --draft
 uv run gmail_cli.py reply <message-id> --body "Reply text" --cc "cc@example.com"
 uv run gmail_cli.py reply <message-id> --body "Reply text" --bcc "hidden@example.com"
+uv run gmail_cli.py reply <message-id> --body "Reply text" --attach report.pdf
 
 # Archive emails (removes the INBOX label)
 uv run gmail_cli.py archive <message-id> [<message-id> ...]
+```
+
+Attachments (`--attach`, repeatable) work on both `send` and `reply`. Gmail
+caps a message at 25MB, and base64 encoding adds roughly a third to each file.
+
+## Tests
+
+```bash
+uv run --dev pytest tests/
 ```
 
 ## Setup
