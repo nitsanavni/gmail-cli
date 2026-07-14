@@ -103,6 +103,28 @@ def load_token(email: str) -> Credentials | None:
     return Credentials.from_authorized_user_info(token_data, SCOPES)
 
 
+def stored_scopes(email: str) -> set[str]:
+    """Read the scopes actually granted to an account's stored token.
+
+    Credentials.from_authorized_user_info() overrides the token's own scopes
+    with the ones we pass it, so creds.scopes reports what we asked for rather
+    than what was granted. Read the file directly to see the truth.
+    """
+    token_path = get_token_path(email)
+    if not token_path.exists():
+        return set()
+
+    scopes = json.loads(token_path.read_text()).get('scopes') or []
+    if isinstance(scopes, str):
+        scopes = scopes.split(' ')
+    return set(scopes)
+
+
+def missing_scopes(email: str) -> list[str]:
+    """Return required scopes the stored token does not grant."""
+    return sorted(set(SCOPES) - stored_scopes(email))
+
+
 def save_token(email: str, creds: Credentials) -> None:
     """Save credentials to token file for specified email."""
     token_path = get_token_path(email)
@@ -158,6 +180,15 @@ def authenticate(account: str | None = None) -> Any:
 
     # Load existing credentials
     creds = load_token(email)
+
+    # A token minted before a scope was added still refreshes cleanly, but the
+    # API then rejects the new operation with an opaque 403. Force re-consent.
+    if creds and (missing := missing_scopes(email)):
+        print(f'Token for {email} is missing required scope(s):', file=sys.stderr)
+        for scope in missing:
+            print(f'  - {scope}', file=sys.stderr)
+        print('Re-authorizing...', file=sys.stderr)
+        creds = None
 
     if not (creds and creds.valid):
         refreshed = creds and refresh_credentials(email, creds)
