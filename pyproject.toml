@@ -14,4 +14,6 @@ dependencies = [
 gmail-cli = "gmail_cli:main"
 
 [dependency-groups]
-dev = []
+dev = [
+    "pytest>=8.0.0",
+]
