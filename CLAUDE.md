@@ -37,6 +37,16 @@ uv run gmail_cli.py reply <message-id> --body "Reply text" --bcc "hidden@example
 
 # Archive emails (removes the INBOX label)
 uv run gmail_cli.py archive <message-id> [<message-id> ...]
+
+# Download attachments (sender-supplied names are stripped to a bare filename)
+uv run gmail_cli.py attachments <message-id>
+uv run gmail_cli.py attachments <message-id> --output ./downloads
+```
+
+## Tests
+
+```bash
+uv run --dev pytest tests/
 ```
 
 ## Setup

@@ -87,6 +87,21 @@ uv run gmail_cli.py archive abc123 def456 ghi789
 Archiving needs the `gmail.modify` scope. The first archive run after
 upgrading re-opens the browser to grant it.
 
+### Download attachments
+
+```bash
+# Save to the current directory
+uv run gmail_cli.py attachments abc123def
+
+# Save to a specific directory (created if missing)
+uv run gmail_cli.py attachments abc123def --output ./downloads
+```
+
+Attachment filenames are chosen by the sender, so they are stripped to a bare
+filename before saving — a download can never be written outside the output
+directory. Colliding names are suffixed (`report.pdf`, `report-1.pdf`) rather
+than overwritten.
+
 ## Gmail Query Syntax
 
 Use [Gmail search operators](https://support.google.com/mail/answer/7190):
