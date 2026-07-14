@@ -9,6 +9,9 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from pathlib import Path
 
+# Either shape a composed message can take: plain text, or text plus attachments.
+Message = MIMEText | MIMEMultipart
+
 
 def get_body_content(args: argparse.Namespace) -> str | None:
     """Get message body from args (--body or --file)."""
@@ -19,7 +22,7 @@ def get_body_content(args: argparse.Namespace) -> str | None:
     return None
 
 
-def set_optional_recipients(message: MIMEText, args: argparse.Namespace) -> None:
+def set_optional_recipients(message: Message, args: argparse.Namespace) -> None:
     """Set CC and BCC headers on a message if provided in args."""
     if args.cc:
         message['Cc'] = ', '.join(args.cc)
@@ -27,7 +30,7 @@ def set_optional_recipients(message: MIMEText, args: argparse.Namespace) -> None
         message['Bcc'] = ', '.join(args.bcc)
 
 
-def build_message(body: str, attachments: list[str] | None) -> MIMEText | MIMEMultipart:
+def build_message(body: str, attachments: list[str] | None) -> Message:
     """Build a MIME message, with attachments if provided."""
     if not attachments:
         return MIMEText(body)
@@ -51,6 +54,6 @@ def build_message(body: str, attachments: list[str] | None) -> MIMEText | MIMEMu
     return msg
 
 
-def encode_message(message: MIMEText) -> str:
+def encode_message(message: Message) -> str:
     """Encode a MIME message for Gmail API."""
     return base64.urlsafe_b64encode(message.as_bytes()).decode('utf-8')
