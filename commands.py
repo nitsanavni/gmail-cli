@@ -2,11 +2,13 @@
 
 import argparse
 import base64
+import sys
 from datetime import datetime
 from email.mime.text import MIMEText
 from pathlib import Path
 
 from auth import authenticate
+from googleapiclient.errors import HttpError
 from html_to_markdown import convert_to_markdown
 
 
@@ -217,15 +219,22 @@ def cmd_archive(args: argparse.Namespace) -> int:
     """Archive emails by removing the INBOX label."""
     service = authenticate(args.account)
 
+    failed = 0
     for msg_id in args.ids:
-        service.users().messages().modify(
-            userId='me',
-            id=msg_id,
-            body={'removeLabelIds': ['INBOX']}
-        ).execute()
+        try:
+            service.users().messages().modify(
+                userId='me',
+                id=msg_id,
+                body={'removeLabelIds': ['INBOX']}
+            ).execute()
+        except HttpError as exc:
+            # Keep going so one bad ID doesn't strand the rest of the batch.
+            print(f'Error archiving {msg_id}: {exc.reason}', file=sys.stderr)
+            failed += 1
+            continue
         print(f'Archived: {msg_id}')
 
-    return 0
+    return 1 if failed else 0
 
 
 def cmd_reply(args: argparse.Namespace) -> int:
