@@ -72,6 +72,21 @@ uv run gmail_cli.py reply abc123def --body "Thanks!" --draft
 uv run gmail_cli.py reply abc123def --body "Thanks!" --bcc "hidden@example.com"
 ```
 
+### Archive emails
+
+Removes the `INBOX` label, matching Gmail's native archive behavior.
+
+```bash
+# Archive one message
+uv run gmail_cli.py archive abc123def
+
+# Archive several at once
+uv run gmail_cli.py archive abc123 def456 ghi789
+```
+
+Archiving needs the `gmail.modify` scope. The first archive run after
+upgrading re-opens the browser to grant it.
+
 ## Gmail Query Syntax
 
 Use [Gmail search operators](https://support.google.com/mail/answer/7190):

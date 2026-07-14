@@ -34,6 +34,9 @@ uv run gmail_cli.py reply <message-id> --body "Reply text"
 uv run gmail_cli.py reply <message-id> --body "Reply text" --draft
 uv run gmail_cli.py reply <message-id> --body "Reply text" --cc "cc@example.com"
 uv run gmail_cli.py reply <message-id> --body "Reply text" --bcc "hidden@example.com"
+
+# Archive emails (removes the INBOX label)
+uv run gmail_cli.py archive <message-id> [<message-id> ...]
 ```
 
 ## Setup
@@ -52,3 +55,7 @@ uv run gmail_cli.py reply <message-id> --body "Reply text" --bcc "hidden@example
 
 - `gmail.readonly` - list/read
 - `gmail.compose` - send/reply/drafts
+- `gmail.modify` - archive (label changes)
+
+Adding a scope invalidates existing tokens. The CLI detects a token that
+predates a scope and re-runs the OAuth flow instead of failing with a 403.
