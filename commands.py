@@ -6,7 +6,14 @@ import sys
 from datetime import datetime
 
 from auth import authenticate
-from compose import build_message, encode_message, get_body_content, set_optional_recipients
+from compose import (
+    attachment_errors,
+    build_message,
+    encode_message,
+    get_body_content,
+    oversize_error,
+    set_optional_recipients,
+)
 from googleapiclient.errors import HttpError
 from html_to_markdown import convert_to_markdown
 
@@ -163,13 +170,24 @@ def cmd_send(args: argparse.Namespace) -> int:
         print('Error: --body or --file required')
         return 1
 
-    service = authenticate(args.account)
+    # Check the attachments before authenticating, so a typo in a path doesn't
+    # send the user through an OAuth prompt only to fail afterwards.
+    if errors := attachment_errors(args.attach):
+        for error in errors:
+            print(f'Error: {error}', file=sys.stderr)
+        return 1
 
     message = build_message(body, args.attach)
     message['To'] = args.to
     message['Subject'] = args.subject or ''
     set_optional_recipients(message, args)
+
+    if error := oversize_error(message):
+        print(f'Error: {error}', file=sys.stderr)
+        return 1
+
     raw = encode_message(message)
+    service = authenticate(args.account)
 
     if args.draft:
         result = service.users().drafts().create(
@@ -221,6 +239,11 @@ def cmd_reply(args: argparse.Namespace) -> int:
         print('Error: --body or --file required')
         return 1
 
+    if errors := attachment_errors(args.attach):
+        for error in errors:
+            print(f'Error: {error}', file=sys.stderr)
+        return 1
+
     service = authenticate(args.account)
 
     # Fetch original message for threading info
@@ -248,6 +271,11 @@ def cmd_reply(args: argparse.Namespace) -> int:
     message['In-Reply-To'] = original_message_id
     message['References'] = original_message_id
     set_optional_recipients(message, args)
+
+    if error := oversize_error(message):
+        print(f'Error: {error}', file=sys.stderr)
+        return 1
+
     raw = encode_message(message)
 
     if args.draft:
