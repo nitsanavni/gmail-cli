@@ -3,6 +3,7 @@
 import argparse
 import base64
 import sys
+from collections.abc import Iterator
 from pathlib import Path
 
 from auth import authenticate
@@ -25,6 +26,20 @@ def safe_filename(filename: str) -> str | None:
     return name
 
 
+def iter_attachment_parts(part: dict) -> Iterator[dict]:
+    """Yield every part carrying an attachment, at any nesting depth.
+
+    Real messages nest: multipart/mixed wrapping multipart/alternative, inline
+    images under multipart/related, forwarded message/rfc822. Scanning only the
+    top-level parts misses attachments that are plainly visible in Gmail.
+    """
+    if part.get('filename') and part.get('body', {}).get('attachmentId'):
+        yield part
+
+    for subpart in part.get('parts', []):
+        yield from iter_attachment_parts(subpart)
+
+
 def cmd_attachments(args: argparse.Namespace) -> int:
     """Download attachments from an email."""
     service = authenticate(args.account)
@@ -34,15 +49,10 @@ def cmd_attachments(args: argparse.Namespace) -> int:
         userId='me', id=args.id, format='full'
     ).execute()
 
-    parts = msg.get('payload', {}).get('parts', [])
     found = 0
-    for part in parts:
-        raw_name = part.get('filename')
-        if not raw_name:
-            continue
-        attachment_id = part.get('body', {}).get('attachmentId')
-        if not attachment_id:
-            continue
+    for part in iter_attachment_parts(msg.get('payload', {})):
+        raw_name = part['filename']
+        attachment_id = part['body']['attachmentId']
 
         name = safe_filename(raw_name)
         if name is None:
