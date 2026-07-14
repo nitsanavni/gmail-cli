@@ -10,7 +10,8 @@ from account_commands import (
     cmd_accounts_list,
     cmd_accounts_remove,
 )
-from commands import cmd_archive, cmd_attachments, cmd_list, cmd_read, cmd_reply, cmd_send
+from attachment_commands import cmd_attachments
+from commands import cmd_archive, cmd_list, cmd_read, cmd_reply, cmd_send
 
 
 def add_compose_args(parser: argparse.ArgumentParser) -> None:
