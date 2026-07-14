@@ -2,6 +2,7 @@
 
 import argparse
 import base64
+import itertools
 import sys
 from collections.abc import Iterator
 from pathlib import Path
@@ -40,10 +41,27 @@ def iter_attachment_parts(part: dict) -> Iterator[dict]:
         yield from iter_attachment_parts(subpart)
 
 
+def unique_path(directory: Path, name: str) -> Path:
+    """Return a path in directory that does not overwrite an existing file."""
+    candidate = directory / name
+    if not candidate.exists():
+        return candidate
+
+    stem, suffix = Path(name).stem, Path(name).suffix
+    for n in itertools.count(1):
+        candidate = directory / f'{stem}-{n}{suffix}'
+        if not candidate.exists():
+            return candidate
+
+    raise AssertionError('unreachable')  # pragma: no cover
+
+
 def cmd_attachments(args: argparse.Namespace) -> int:
     """Download attachments from an email."""
     service = authenticate(args.account)
+
     output_dir = Path(args.output) if args.output else Path('.')
+    output_dir.mkdir(parents=True, exist_ok=True)
 
     msg = service.users().messages().get(
         userId='me', id=args.id, format='full'
@@ -65,9 +83,13 @@ def cmd_attachments(args: argparse.Namespace) -> int:
             userId='me', messageId=args.id, id=attachment_id
         ).execute()
 
-        data = base64.urlsafe_b64decode(attachment['data'])
-        filepath = output_dir / name
-        filepath.write_bytes(data)
+        data = attachment.get('data')
+        if not data:
+            print(f'No data returned for attachment: {name}', file=sys.stderr)
+            continue
+
+        filepath = unique_path(output_dir, name)
+        filepath.write_bytes(base64.urlsafe_b64decode(data))
         print(f'Saved: {filepath}')
         found += 1
 
