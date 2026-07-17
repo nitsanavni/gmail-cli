@@ -11,6 +11,7 @@ from account_commands import (
     cmd_accounts_reauth,
     cmd_accounts_remove,
 )
+from calendar_commands import cmd_cal_add, cmd_cal_calendars, cmd_cal_delete, cmd_cal_list
 from commands import cmd_archive, cmd_attachments, cmd_list, cmd_read, cmd_reply, cmd_send
 
 
@@ -76,6 +77,45 @@ def main() -> int:
     archive_parser = subparsers.add_parser('archive', help='Archive emails')
     archive_parser.add_argument('ids', nargs='+', help='Message IDs to archive')
     archive_parser.set_defaults(func=cmd_archive)
+
+    # cal command
+    cal_parser = subparsers.add_parser('cal', help='Google Calendar')
+    cal_subparsers = cal_parser.add_subparsers(dest='cal_action', required=True)
+
+    cal_list_parser = cal_subparsers.add_parser('list', help='List upcoming events')
+    cal_list_parser.add_argument('--days', '-d', type=int, default=7,
+                                 help='Days ahead to show (default: 7)')
+    cal_list_parser.add_argument('--limit', '-n', type=int, default=25,
+                                 help='Max events (default: 25)')
+    cal_list_parser.add_argument('--calendar', '-c', default='primary',
+                                 help='Calendar ID (default: primary)')
+    cal_list_parser.set_defaults(func=cmd_cal_list)
+
+    cal_add_parser = cal_subparsers.add_parser('add', help='Create an event')
+    cal_add_parser.add_argument('title', help='Event title')
+    cal_add_parser.add_argument('--when', '-w', required=True,
+                                help="Start: 'YYYY-MM-DD HH:MM' or YYYY-MM-DD (all-day)")
+    cal_add_parser.add_argument('--duration', type=int, default=30,
+                                help='Duration in minutes (default: 30)')
+    cal_add_parser.add_argument('--description', help='Event description')
+    cal_add_parser.add_argument('--location', help='Event location')
+    cal_add_parser.add_argument('--reminder', type=int,
+                                help='Popup reminder N minutes before')
+    cal_add_parser.add_argument('--calendar', '-c', default='primary',
+                                help='Calendar ID (default: primary)')
+    cal_add_parser.set_defaults(func=cmd_cal_add)
+
+    cal_delete_parser = cal_subparsers.add_parser('delete', help='Delete an event')
+    cal_delete_parser.add_argument('event_id', help='Event ID')
+    cal_delete_parser.add_argument('--yes', '-y', action='store_true',
+                                   help='Skip confirmation prompt')
+    cal_delete_parser.add_argument('--calendar', '-c', default='primary',
+                                   help='Calendar ID (default: primary)')
+    cal_delete_parser.set_defaults(func=cmd_cal_delete)
+
+    cal_subparsers.add_parser(
+        'calendars', help='List available calendars'
+    ).set_defaults(func=cmd_cal_calendars)
 
     # accounts command
     accounts_parser = subparsers.add_parser('accounts', help='Manage Gmail accounts')

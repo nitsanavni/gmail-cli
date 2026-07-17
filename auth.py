@@ -15,6 +15,7 @@ SCOPES = [
     'https://www.googleapis.com/auth/gmail.readonly',
     'https://www.googleapis.com/auth/gmail.compose',
     'https://www.googleapis.com/auth/gmail.modify',
+    'https://www.googleapis.com/auth/calendar',
 ]
 
 BASE_DIR = Path(__file__).parent
@@ -146,18 +147,14 @@ def run_oauth_flow() -> tuple[Credentials, str]:
     return creds, email
 
 
-def authenticate(account: str | None = None) -> Any:
-    """Authenticate with Gmail API and return service object.
-
-    Args:
-        account: Email address of account to use, or None for default behavior.
-    """
+def get_credentials(account: str | None = None) -> Any:
+    """Resolve account and return valid credentials, running OAuth flow if needed."""
     email = resolve_account(account)
 
     if email is None:
         # No accounts exist, need OAuth flow
         creds, email = run_oauth_flow()
-        return build('gmail', 'v1', credentials=creds)
+        return creds
 
     # Load existing credentials
     creds = load_token(email)
@@ -172,4 +169,18 @@ def authenticate(account: str | None = None) -> Any:
                     file=sys.stderr
                 )
 
-    return build('gmail', 'v1', credentials=creds)
+    return creds
+
+
+def authenticate(account: str | None = None) -> Any:
+    """Authenticate with Gmail API and return service object.
+
+    Args:
+        account: Email address of account to use, or None for default behavior.
+    """
+    return build('gmail', 'v1', credentials=get_credentials(account))
+
+
+def authenticate_calendar(account: str | None = None) -> Any:
+    """Authenticate with Calendar API and return service object."""
+    return build('calendar', 'v3', credentials=get_credentials(account))
