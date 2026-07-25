@@ -126,8 +126,26 @@ comment-creation method, and the anchor request has been open since ~2016
 (PDF, images) where *your own* app renders them — the Docs editor never resolves
 one it did not mint.
 
-The only route that works is driving the Docs editor UI in a browser: select the
-text, `Ctrl+Alt+M`. Viable if you have browser automation; not otherwise.
+**But an agent CAN anchor by driving the editor UI — verified working.** With
+browser automation (e.g. Claude in Chrome):
+
+1. Open the doc in the browser.
+2. **Triple-click** the target paragraph. This is the crucial trick: Docs renders
+   to a custom canvas, so DOM range selection does not apply, but triple-click
+   selects a whole paragraph natively and reliably.
+3. `Cmd+Alt+M` (macOS) / `Ctrl+Alt+M` — the comment box opens, already anchored.
+4. Type the comment, then click **Comment**.
+
+The result is indistinguishable from a human's: a real `kix.*` anchor with
+`quotedFileContent` populated, and the text highlighted in the UI.
+
+Gotcha: the comment box **grows as you type**, moving the Comment button. Take a
+screenshot after typing rather than reusing coordinates from before it.
+
+Limits: paragraph granularity (triple-click selects a paragraph; a sub-phrase
+would need find-and-select or coordinate drags, both brittle), and it needs a
+live browser session — unavailable for headless or scheduled runs. For those,
+write in the body instead.
 
 Verified independently before the above was known, and consistent with it:
 
@@ -144,11 +162,10 @@ Verified independently before the above was known, and consistent with it:
 `quotedFileContent` is the reliable tell: populated means the anchor resolved.
 Every agent-created anchor leaves it empty.
 
-Consequence: agent-originated comments are unanchored, and unanchored comments
-render weakly or not at all. **Do not open a conversation in a comment** — write
-in the body instead. The workable direction is the reverse: the user anchors a
-comment to their selection, the agent replies in that thread, where the anchor
-and its quoted text come for free.
+Consequence: **API-originated** comments are unanchored, and unanchored comments
+render weakly or not at all. Do not open a conversation with `drive comment` —
+either anchor via the browser (above) or write in the body. Replying to a thread
+the user anchored is always fine and inherits their anchor for free.
 
 **Comments need their own watcher.** Document text and comments are different
 APIs; `docs watch` sees no comment activity whatsoever. Use `drive
