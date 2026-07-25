@@ -113,8 +113,22 @@ similar) marker — otherwise the user sees their own name saying things they ne
 wrote. This matters more here than in the body, where the agent at least controls
 the whole paragraph.
 
-Anchoring to a range is not usefully exposed by the API: anchored threads are
-created by a human selecting text. Replying to those is the useful direction.
+**Anchor, or the user never sees it.** An unanchored comment frequently does not
+render in the Docs UI at all — it exists only via the API. `drive comment
+--anchor-text "..."` builds the anchor from the undocumented legacy shape
+`{"r": revision, "a":[{"txt":{"o": offset, "l": length}}]}`, where offset is the
+Docs index minus one. Note the user may still need to open the comment pane.
+
+**Comments need their own watcher.** Document text and comments are different
+APIs; `docs watch` sees no comment activity whatsoever. Use `drive
+watch-comments` alongside it, under its own Monitor.
+
+**Self-wake applies here too, and is worse.** Because Drive attributes agent
+comments to the *user*, a comment watcher cannot filter its own writes out by
+author. `drive comment`/`drive reply` take `--state` and claim their own IDs in
+the watcher's state file — the same contract as `docs append --state`. Expect
+this failure mode on every new surface: any channel the agent can write to and
+watch will feed itself unless the writer marks its output.
 
 ## Etiquette
 

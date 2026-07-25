@@ -14,10 +14,12 @@ from account_commands import (
 from calendar_commands import cmd_cal_add, cmd_cal_calendars, cmd_cal_delete, cmd_cal_list
 from commands import cmd_archive, cmd_attachments, cmd_list, cmd_read, cmd_reply, cmd_send
 from docs_commands import cmd_docs_append, cmd_docs_create, cmd_docs_watch
+from guide_commands import cmd_guide, guide_hint
 from drive_commands import (
     cmd_drive_comment_add,
     cmd_drive_comment_delete,
     cmd_drive_comment_reply,
+    cmd_drive_watch_comments,
     cmd_drive_comments,
     cmd_drive_info,
     cmd_drive_list,
@@ -39,7 +41,9 @@ def add_compose_args(parser: argparse.ArgumentParser) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description='Gmail CLI - Read, send, and reply to emails'
+        description='Gmail CLI - email, calendar, Drive and Docs',
+        epilog=guide_hint(),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
 
     # Global account flag
@@ -174,12 +178,22 @@ def main() -> int:
     drive_reply_parser.add_argument('--body', '-b', required=True, help='Reply text')
     drive_reply_parser.add_argument('--resolve', action='store_true',
                                     help='Resolve the thread with this reply')
+    drive_reply_parser.add_argument('--state', '-s',
+                                      help='Mark this write as seen in a '
+                                           'watch-comments state file')
     drive_reply_parser.set_defaults(func=cmd_drive_comment_reply)
 
     drive_comment_parser = drive_subparsers.add_parser(
         'comment', help='Add a comment to a file')
     drive_comment_parser.add_argument('file_id', help='File ID or Drive/Docs URL')
     drive_comment_parser.add_argument('--body', '-b', required=True, help='Comment text')
+    drive_comment_parser.add_argument('--anchor-text',
+                                      help='Anchor to the first occurrence of this '
+                                           'text (strongly preferred: unanchored '
+                                           'comments often do not render in Docs)')
+    drive_comment_parser.add_argument('--state', '-s',
+                                      help='Mark this write as seen in a '
+                                           'watch-comments state file')
     drive_comment_parser.set_defaults(func=cmd_drive_comment_add)
 
     drive_uncomment_parser = drive_subparsers.add_parser(
@@ -188,8 +202,29 @@ def main() -> int:
     drive_uncomment_parser.add_argument('comment_id', help='Comment thread ID')
     drive_uncomment_parser.set_defaults(func=cmd_drive_comment_delete)
 
+    guide_parser = subparsers.add_parser(
+        'guide', help='List or print the bundled guides')
+    guide_parser.add_argument('name', nargs='?',
+                              help='Guide to print (omit to list)')
+    guide_parser.set_defaults(func=cmd_guide)
+
+    drive_wc_parser = drive_subparsers.add_parser(
+        'watch-comments', help='Poll comment threads, emit new comments/replies')
+    drive_wc_parser.add_argument('file_id', help='File ID or Drive/Docs URL')
+    drive_wc_parser.add_argument('--interval', '-i', type=float, default=5,
+                                 help='Seconds between polls (default: 5)')
+    drive_wc_parser.add_argument('--timeout', '-t', type=float, help='Stop after N seconds')
+    drive_wc_parser.add_argument('--once', action='store_true',
+                                 help='Exit after the first new activity')
+    drive_wc_parser.add_argument('--state', '-s',
+                                 help='Track seen comment/reply IDs across runs')
+    drive_wc_parser.set_defaults(func=cmd_drive_watch_comments)
+
     # docs command
-    docs_parser = subparsers.add_parser('docs', help='Google Docs (write)')
+    docs_parser = subparsers.add_parser(
+        'docs', help='Google Docs (write)',
+        epilog=guide_hint(),
+        formatter_class=argparse.RawDescriptionHelpFormatter)
     docs_subparsers = docs_parser.add_subparsers(dest='docs_action', required=True)
 
     docs_append_parser = docs_subparsers.add_parser(
@@ -224,7 +259,9 @@ def main() -> int:
     docs_create_parser.set_defaults(func=cmd_docs_create)
 
     docs_watch_parser = docs_subparsers.add_parser(
-        'watch', help='Poll a doc and print a diff on each change')
+        'watch', help='Poll a doc and print a diff on each change',
+        epilog=guide_hint(),
+        formatter_class=argparse.RawDescriptionHelpFormatter)
     docs_watch_parser.add_argument('doc_id', help='Doc ID or Docs URL')
     docs_watch_parser.add_argument('--interval', '-i', type=float, default=10,
                                    help='Seconds between polls (default: 10)')
