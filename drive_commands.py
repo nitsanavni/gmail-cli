@@ -337,6 +337,14 @@ def cmd_drive_watch_comments(args: argparse.Namespace) -> int:
             print('watch-comments: timeout reached', file=sys.stderr, flush=True)
             return 0
 
+        # Re-read state each poll: a writer (our own comment/reply --state) may
+        # have claimed ids since we started. Holding `seen` only in memory makes
+        # the watcher report the agent's own writes back to it.
+        if state_path and state_path.exists():
+            saved = json.loads(state_path.read_text())
+            if saved.get('file_id') == file_id:
+                seen |= set(saved.get('seen', []))
+
         try:
             threads = snapshot()
         except HttpError as exc:
