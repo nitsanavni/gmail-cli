@@ -352,17 +352,17 @@ def cmd_drive_watch_comments(args: argparse.Namespace) -> int:
             time.sleep(args.interval)
             continue
 
-        events: list[str] = []
+        events: list[tuple[str, str]] = []   # (id, rendered line)
         for comment in threads:
             quoted = (comment.get('quotedFileContent') or {}).get('value', '')
             author = comment.get('author', {}).get('displayName', '?')
             if comment['id'] not in seen:
                 seen.add(comment['id'])
                 if not first_pass:
-                    events.append(
+                    events.append((comment['id'],
                         f"NEW THREAD [{comment['id']}] {author}: "
                         f"{comment.get('content', '')}"
-                        + (f'\n    on: {quoted!r}' if quoted else ''))
+                        + (f'\n    on: {quoted!r}' if quoted else '')))
             for reply in comment.get('replies', []):
                 if reply['id'] in seen:
                     continue
@@ -370,16 +370,27 @@ def cmd_drive_watch_comments(args: argparse.Namespace) -> int:
                 if first_pass:
                     continue
                 r_author = reply.get('author', {}).get('displayName', '?')
-                events.append(
+                events.append((reply['id'],
                     f"REPLY in [{comment['id']}] {r_author}: "
                     f"{reply.get('content', '')}"
-                    + (f'\n    thread on: {quoted!r}' if quoted else ''))
+                    + (f'\n    thread on: {quoted!r}' if quoted else '')))
+
+        # Re-check state after the fetch: a write that landed between the
+        # state read and the network round-trip would otherwise be reported as
+        # if it came from the user.
+        if events and state_path and state_path.exists():
+            saved = json.loads(state_path.read_text())
+            if saved.get('file_id') == file_id:
+                claimed = set(saved.get('seen', []))
+                seen |= claimed
+                events = [(eid, text) for eid, text in events
+                          if eid not in claimed]
 
         save()
         if events:
             stamp = datetime.now().strftime('%H:%M:%S')
             print(f'\n=== comments {stamp} ===', flush=True)
-            print('\n'.join(events), flush=True)
+            print('\n'.join(text for _, text in events), flush=True)
             if args.once:
                 return 0
 
