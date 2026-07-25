@@ -347,7 +347,10 @@ def cmd_docs_watch(args: argparse.Namespace) -> int:
     def save_state(rev: str | None, text: str) -> None:
         write_state(args.state, doc_id, rev, text)
 
-    print(f"watching '{doc.get('title')}' every {args.interval}s", flush=True)
+    # Status goes to stderr: under a Monitor, every stdout line becomes a
+    # notification, and the startup banner is not an event worth waking for.
+    print(f"watching '{doc.get('title')}' every {args.interval}s",
+          file=sys.stderr, flush=True)
 
     # Report anything missed since the saved baseline before polling.
     current = doc_text(doc)
@@ -368,7 +371,7 @@ def cmd_docs_watch(args: argparse.Namespace) -> int:
 
     while True:
         if args.timeout and time.monotonic() - started >= args.timeout:
-            print('watch: timeout reached', flush=True)
+            print('watch: timeout reached', file=sys.stderr, flush=True)
             return 0
         time.sleep(args.interval)
 
