@@ -5,7 +5,6 @@ The Docs API inserts plain text only, so markdown-ish source is parsed into
 """
 
 import argparse
-import re
 import sys
 
 from googleapiclient.errors import HttpError
@@ -14,8 +13,35 @@ from auth import authenticate_docs
 from drive_commands import extract_id
 
 HEADING_PREFIXES = [('### ', 3), ('## ', 2), ('# ', 1)]
-# Bold before italic, so '**x**' is not eaten as two italic markers.
-INLINE = re.compile(r'\*\*(.+?)\*\*|\*(.+?)\*')
+
+# Inline markers, longest first so '**' is not read as two '*'.
+MARKERS = [('**', 'bold'), ('*', 'italic'), ('~', 'subscript'), ('^', 'superscript')]
+
+
+def scan_inline(line: str) -> tuple[str, list[tuple[int, int, str]]]:
+    """Strip inline markers, returning (clean_text, [(start, end, kind)]).
+
+    A toggling scanner rather than paired regexes, so markers nest:
+    '**A > B when m~2~ > m~1~**' keeps the subscripts inside the bold run.
+    Unclosed markers are dropped.
+    """
+    out: list[str] = []
+    open_at: dict[str, int] = {}
+    ranges: list[tuple[int, int, str]] = []
+    i = 0
+    while i < len(line):
+        for token, kind in MARKERS:
+            if line.startswith(token, i):
+                if kind in open_at:
+                    ranges.append((open_at.pop(kind), len(out), kind))
+                else:
+                    open_at[kind] = len(out)
+                i += len(token)
+                break
+        else:
+            out.append(line[i])
+            i += 1
+    return ''.join(out), [r for r in ranges if r[1] > r[0]]
 
 
 def unwrap(text: str) -> str:
@@ -68,23 +94,7 @@ def parse_markdown(text: str) -> tuple[str, list[dict]]:
                 bullet = True
                 line = line[2:]
 
-        # Strip emphasis markers, recording ranges against the cleaned line.
-        clean_parts: list[str] = []
-        inline_ranges: list[tuple[int, int, str]] = []
-        pos = 0
-        clean_len = 0
-        for match in INLINE.finditer(line):
-            literal = line[pos:match.start()]
-            clean_parts.append(literal)
-            clean_len += len(literal)
-            inner = match.group(1) if match.group(1) is not None else match.group(2)
-            kind = 'bold' if match.group(1) is not None else 'italic'
-            inline_ranges.append((clean_len, clean_len + len(inner), kind))
-            clean_parts.append(inner)
-            clean_len += len(inner)
-            pos = match.end()
-        clean_parts.append(line[pos:])
-        clean = ''.join(clean_parts)
+        clean, inline_ranges = scan_inline(line)
 
         # Paragraph range includes its trailing newline.
         para_end = offset + len(clean) + 1
@@ -103,6 +113,21 @@ def parse_markdown(text: str) -> tuple[str, list[dict]]:
     return ''.join(out), ops
 
 
+def u16_offsets(text: str) -> list[int]:
+    """Map each Python char offset to a UTF-16 code-unit offset.
+
+    Docs indexes in UTF-16 units, so a non-BMP char (emoji, some symbols)
+    counts as 2 there but 1 in Python. Without this, every range after the
+    first such char is applied one position early.
+    """
+    offsets = [0]
+    total = 0
+    for ch in text:
+        total += 2 if ord(ch) > 0xFFFF else 1
+        offsets.append(total)
+    return offsets
+
+
 def build_requests(text: str, ops: list[dict], at: int,
                    font_size: float | None = None) -> list[dict]:
     """Build batchUpdate requests to insert text at `at` and style it.
@@ -110,7 +135,8 @@ def build_requests(text: str, ops: list[dict], at: int,
     font_size (points) applies to body text only; headings keep the size from
     their named style.
     """
-    end = at + len(text)
+    u16 = u16_offsets(text)
+    end = at + u16[-1]
     # baselineOffset matters: appending at a doc that ends in subscripted math
     # otherwise inherits SUBSCRIPT, rendering the whole section small and low.
     reset_style: dict = {'bold': False, 'italic': False,
@@ -135,7 +161,7 @@ def build_requests(text: str, ops: list[dict], at: int,
     ]
 
     for op in ops:
-        rng = {'startIndex': at + op['start'], 'endIndex': at + op['end']}
+        rng = {'startIndex': at + u16[op['start']], 'endIndex': at + u16[op['end']]}
         if op['kind'] == 'heading':
             requests.append({'updateParagraphStyle': {
                 'range': rng,
@@ -149,6 +175,11 @@ def build_requests(text: str, ops: list[dict], at: int,
             requests.append({'updateTextStyle': {
                 'range': rng, 'textStyle': {op['kind']: True},
                 'fields': op['kind']}})
+        elif op['kind'] in ('subscript', 'superscript'):
+            requests.append({'updateTextStyle': {
+                'range': rng,
+                'textStyle': {'baselineOffset': op['kind'].upper()},
+                'fields': 'baselineOffset'}})
 
     # Bullets last: createParagraphBullets can shift indices.
     for op in ops:

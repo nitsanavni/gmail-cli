@@ -49,6 +49,16 @@ uv run gmail_cli.py docs append <id-or-url> --body "text"
 uv run gmail_cli.py docs append <id-or-url> --file x.md --dry-run  # preview only
 ```
 
+`docs append` markup: `#`/`##`/`###` headings, `- ` bullets, `**bold**`,
+`*italic*`, `~subscript~`, `^superscript^` — markers nest.
+
+Two index traps when extending `docs append`:
+- Docs indexes in **UTF-16 code units**, so a non-BMP char (emoji) shifts every
+  later range by one. Use `u16_offsets()`, never `len()`.
+- Inserted text **inherits the style at the insertion point**. The reset request
+  must clear `baselineOffset` too, or appending after subscripted math renders
+  the whole section as subscript.
+
 `drive read` accepts a bare file ID or any Drive/Docs URL. Google-native files are
 exported: docs -> markdown, sheets -> CSV, slides -> plain text. Override with `--mime`.
 

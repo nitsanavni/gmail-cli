@@ -98,6 +98,21 @@ uv run gmail_cli.py drive info <id>
 Google-native files are exported as text: Docs → markdown, Sheets → CSV,
 Slides → plain text. Override the export format with `--mime`.
 
+### Append to a Google Doc
+
+```bash
+uv run gmail_cli.py docs append <id-or-url> --file section.md
+uv run gmail_cli.py docs append <id-or-url> --body "one-liner"
+uv run gmail_cli.py docs append <id-or-url> --file x.md --dry-run  # preview only
+```
+
+Markup supported: `# ## ###` headings, `- ` bullets, `**bold**`, `*italic*`,
+`~subscript~`, `^superscript^`. Markers nest, so `**m~1~ < m~2~**` keeps the
+subscripts inside the bold run.
+
+Other flags: `--plain` (insert literally), `--keep-breaks` (keep source line
+breaks instead of unwrapping soft-wrapped paragraphs), `--font-size N`.
+
 To let Claude read a doc, just share it with your Gmail account and paste the link.
 
 ## Gmail Query Syntax
