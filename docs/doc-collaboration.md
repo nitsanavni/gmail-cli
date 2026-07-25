@@ -113,7 +113,23 @@ similar) marker — otherwise the user sees their own name saying things they ne
 wrote. This matters more here than in the body, where the agent at least controls
 the whole paragraph.
 
-**An agent cannot create an anchored comment.** Verified, after four attempts:
+**An agent cannot create an anchored comment via any API.** This is *documented
+intended behaviour*, not a format to crack. The Drive API comments guide states:
+
+> "The anchor is saved and returned when retrieving the comment, however Google
+> Workspace editor apps treat these comments as un-anchored comments."
+
+There is no comments surface in the Docs API at all (feature request
+issuetracker 298084084, open), `DocumentApp` in Apps Script has no
+comment-creation method, and the anchor request has been open since ~2016
+(issuetracker 36763384, 292610078). Anchors are only meaningful on static files
+(PDF, images) where *your own* app renders them — the Docs editor never resolves
+one it did not mint.
+
+The only route that works is driving the Docs editor UI in a browser: select the
+text, `Ctrl+Alt+M`. Viable if you have browser automation; not otherwise.
+
+Verified independently before the above was known, and consistent with it:
 
 - The `anchor` field on an editor-created comment is an opaque id like
   `kix.m9e3i1xcxnch`, not the documented-looking JSON offsets.
