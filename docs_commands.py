@@ -111,8 +111,12 @@ def build_requests(text: str, ops: list[dict], at: int,
     their named style.
     """
     end = at + len(text)
-    reset_style: dict = {'bold': False, 'italic': False}
-    reset_fields = 'bold,italic'
+    # baselineOffset matters: appending at a doc that ends in subscripted math
+    # otherwise inherits SUBSCRIPT, rendering the whole section small and low.
+    reset_style: dict = {'bold': False, 'italic': False,
+                         'baselineOffset': 'NONE', 'underline': False,
+                         'strikethrough': False}
+    reset_fields = 'bold,italic,baselineOffset,underline,strikethrough'
     if font_size:
         reset_style['fontSize'] = {'magnitude': font_size, 'unit': 'PT'}
         reset_fields += ',fontSize'
