@@ -173,6 +173,9 @@ def main() -> int:
                                     help='Insert literally, no markdown styling')
     docs_append_parser.add_argument('--dry-run', action='store_true',
                                     help='Preview without modifying the doc')
+    docs_append_parser.add_argument('--state', '-s',
+                                    help="Re-baseline this watch state file, so "
+                                         "watch does not report our own write")
     docs_append_parser.set_defaults(func=cmd_docs_append)
 
     docs_create_parser = docs_subparsers.add_parser('create', help='Create a new doc')

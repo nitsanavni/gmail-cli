@@ -245,9 +245,32 @@ def cmd_docs_append(args: argparse.Namespace) -> int:
         print(f'Error: append failed: {exc}', file=sys.stderr)
         return 1
 
+    sync_state(service, args.state, doc_id)
+
     print(f"Appended {len(text)} chars to '{doc.get('title')}'")
     print(f'https://docs.google.com/document/d/{doc_id}/edit')
     return 0
+
+
+def write_state(path: str | None, doc_id: str, revision: str | None,
+                text: str) -> None:
+    """Record the last-seen state of a doc, for `watch --state`."""
+    if path:
+        Path(path).write_text(json.dumps(
+            {'doc_id': doc_id, 'revision': revision, 'text': text}))
+
+
+def sync_state(service, path: str | None, doc_id: str) -> None:
+    """Re-baseline after our own write, so watch does not report it as a change.
+
+    The Docs API exposes no author on a revision, so a watcher cannot tell our
+    edits from the user's. Updating the baseline here is what keeps the loop
+    from waking on its own output.
+    """
+    if not path:
+        return
+    doc = service.documents().get(documentId=doc_id).execute()
+    write_state(path, doc_id, doc.get('revisionId'), doc_text(doc))
 
 
 def doc_text(doc: dict) -> str:
@@ -307,9 +330,7 @@ def cmd_docs_watch(args: argparse.Namespace) -> int:
             revision = saved.get('revision')
 
     def save_state(rev: str | None, text: str) -> None:
-        if state_path:
-            state_path.write_text(json.dumps(
-                {'doc_id': doc_id, 'revision': rev, 'text': text}))
+        write_state(args.state, doc_id, rev, text)
 
     print(f"watching '{doc.get('title')}' every {args.interval}s", flush=True)
 
