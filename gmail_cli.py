@@ -190,6 +190,9 @@ def main() -> int:
                                    help='Stop after N seconds')
     docs_watch_parser.add_argument('--once', action='store_true',
                                    help='Exit after the first change')
+    docs_watch_parser.add_argument('--state', '-s',
+                                   help='Persist the baseline here so restarts '
+                                        'report edits made while not watching')
     docs_watch_parser.add_argument('--context', '-C', type=int, default=1,
                                    help='Diff context lines (default: 1)')
     docs_watch_parser.set_defaults(func=cmd_docs_watch)

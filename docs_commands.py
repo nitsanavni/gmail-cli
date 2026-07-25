@@ -6,9 +6,11 @@ The Docs API inserts plain text only, so markdown-ish source is parsed into
 
 import argparse
 import difflib
+import json
 import sys
 import time
 from datetime import datetime
+from pathlib import Path
 
 from googleapiclient.errors import HttpError
 
@@ -293,7 +295,40 @@ def cmd_docs_watch(args: argparse.Namespace) -> int:
     revision = doc.get('revisionId')
     previous = doc_text(doc)
     started = time.monotonic()
+
+    # With --state, the baseline persists across runs, so edits made while no
+    # watcher was running are still reported instead of being silently absorbed
+    # into a fresh baseline.
+    state_path = Path(args.state) if args.state else None
+    if state_path and state_path.exists():
+        saved = json.loads(state_path.read_text())
+        if saved.get('doc_id') == doc_id:
+            previous = saved.get('text', previous)
+            revision = saved.get('revision')
+
+    def save_state(rev: str | None, text: str) -> None:
+        if state_path:
+            state_path.write_text(json.dumps(
+                {'doc_id': doc_id, 'revision': rev, 'text': text}))
+
     print(f"watching '{doc.get('title')}' every {args.interval}s", flush=True)
+
+    # Report anything missed since the saved baseline before polling.
+    current = doc_text(doc)
+    if current != previous:
+        missed = list(difflib.unified_diff(
+            previous.split('\n'), current.split('\n'),
+            fromfile='before', tofile='after', lineterm='', n=args.context))
+        if missed:
+            print(f"\n=== {datetime.now().strftime('%H:%M:%S')} "
+                  f"(missed while not watching) ===", flush=True)
+            print('\n'.join(missed), flush=True)
+        previous = current
+        revision = doc.get('revisionId')
+        save_state(revision, previous)
+        if args.once:
+            return 0
+    save_state(revision, previous)
 
     while True:
         if args.timeout and time.monotonic() - started >= args.timeout:
@@ -316,6 +351,7 @@ def cmd_docs_watch(args: argparse.Namespace) -> int:
             previous.split('\n'), current.split('\n'),
             fromfile='before', tofile='after', lineterm='', n=args.context))
         previous = current
+        save_state(revision, previous)
         if not diff:
             continue
 
