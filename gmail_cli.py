@@ -13,6 +13,12 @@ from account_commands import (
 )
 from calendar_commands import cmd_cal_add, cmd_cal_calendars, cmd_cal_delete, cmd_cal_list
 from commands import cmd_archive, cmd_attachments, cmd_list, cmd_read, cmd_reply, cmd_send
+from drive_commands import (
+    cmd_drive_info,
+    cmd_drive_list,
+    cmd_drive_read,
+    cmd_drive_search,
+)
 
 
 def add_compose_args(parser: argparse.ArgumentParser) -> None:
@@ -116,6 +122,38 @@ def main() -> int:
     cal_subparsers.add_parser(
         'calendars', help='List available calendars'
     ).set_defaults(func=cmd_cal_calendars)
+
+    # drive command
+    drive_parser = subparsers.add_parser('drive', help='Google Drive (read-only)')
+    drive_subparsers = drive_parser.add_subparsers(dest='drive_action', required=True)
+
+    drive_list_parser = drive_subparsers.add_parser(
+        'list', help='List recently modified files')
+    drive_list_parser.add_argument('--limit', '-n', type=int, default=25,
+                                   help='Max files to return (default: 25)')
+    drive_list_parser.add_argument('--shared', action='store_true',
+                                   help='Only files shared with me')
+    drive_list_parser.set_defaults(func=cmd_drive_list)
+
+    drive_search_parser = drive_subparsers.add_parser(
+        'search', help='Search files by name and content')
+    drive_search_parser.add_argument('query', help='Search text')
+    drive_search_parser.add_argument('--limit', '-n', type=int, default=25,
+                                     help='Max files to return (default: 25)')
+    drive_search_parser.add_argument('--shared', action='store_true',
+                                     help='Only files shared with me')
+    drive_search_parser.set_defaults(func=cmd_drive_search)
+
+    drive_read_parser = drive_subparsers.add_parser(
+        'read', help='Print file content (gdocs export as markdown)')
+    drive_read_parser.add_argument('file_id', help='File ID or Drive/Docs URL')
+    drive_read_parser.add_argument('--mime', help='Override export mime type')
+    drive_read_parser.add_argument('--output', '-o', help='Save to file instead of stdout')
+    drive_read_parser.set_defaults(func=cmd_drive_read)
+
+    drive_info_parser = drive_subparsers.add_parser('info', help='Show file metadata')
+    drive_info_parser.add_argument('file_id', help='File ID or Drive/Docs URL')
+    drive_info_parser.set_defaults(func=cmd_drive_info)
 
     # accounts command
     accounts_parser = subparsers.add_parser('accounts', help='Manage Gmail accounts')

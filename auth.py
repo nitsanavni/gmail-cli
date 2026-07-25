@@ -16,6 +16,7 @@ SCOPES = [
     'https://www.googleapis.com/auth/gmail.compose',
     'https://www.googleapis.com/auth/gmail.modify',
     'https://www.googleapis.com/auth/calendar',
+    'https://www.googleapis.com/auth/drive.readonly',
 ]
 
 BASE_DIR = Path(__file__).parent
@@ -184,3 +185,8 @@ def authenticate(account: str | None = None) -> Any:
 def authenticate_calendar(account: str | None = None) -> Any:
     """Authenticate with Calendar API and return service object."""
     return build('calendar', 'v3', credentials=get_credentials(account))
+
+
+def authenticate_drive(account: str | None = None) -> Any:
+    """Authenticate with Drive API and return service object."""
+    return build('drive', 'v3', credentials=get_credentials(account))

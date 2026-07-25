@@ -34,7 +34,18 @@ uv run gmail_cli.py reply <message-id> --body "Reply text"
 uv run gmail_cli.py reply <message-id> --body "Reply text" --draft
 uv run gmail_cli.py reply <message-id> --body "Reply text" --cc "cc@example.com"
 uv run gmail_cli.py reply <message-id> --body "Reply text" --bcc "hidden@example.com"
+
+# Google Drive (read-only)
+uv run gmail_cli.py drive list                    # Recently modified files
+uv run gmail_cli.py drive list --shared           # Only files shared with me
+uv run gmail_cli.py drive search "quarterly"      # Match name or full text
+uv run gmail_cli.py drive read <file-id-or-url>   # Content to stdout
+uv run gmail_cli.py drive read <url> -o out.md    # Save to file (required for binaries)
+uv run gmail_cli.py drive info <file-id-or-url>   # Metadata
 ```
+
+`drive read` accepts a bare file ID or any Drive/Docs URL. Google-native files are
+exported: docs -> markdown, sheets -> CSV, slides -> plain text. Override with `--mime`.
 
 ## Setup
 
@@ -52,3 +63,8 @@ uv run gmail_cli.py reply <message-id> --body "Reply text" --bcc "hidden@example
 
 - `gmail.readonly` - list/read
 - `gmail.compose` - send/reply/drafts
+- `gmail.modify` - archive
+- `calendar` - cal commands
+- `drive.readonly` - drive commands
+
+Changing this list invalidates existing tokens; the next command re-runs the OAuth flow.

@@ -72,6 +72,34 @@ uv run gmail_cli.py reply abc123def --body "Thanks!" --draft
 uv run gmail_cli.py reply abc123def --body "Thanks!" --bcc "hidden@example.com"
 ```
 
+### Google Drive (read-only)
+
+```bash
+# Recently modified files (ID, date, type, name, owner)
+uv run gmail_cli.py drive list --limit 10
+
+# Only files other people shared with you
+uv run gmail_cli.py drive list --shared
+
+# Search by filename or full text
+uv run gmail_cli.py drive search "board meeting"
+
+# Read content — accepts a bare file ID or any Drive/Docs URL
+uv run gmail_cli.py drive read 1uAO8mD6Sj24UgqNZ9TWgdznztDkeIqK
+uv run gmail_cli.py drive read "https://docs.google.com/document/d/<id>/edit"
+
+# Save to a file (required for binaries like PDFs/images)
+uv run gmail_cli.py drive read <id> --output paper.pdf
+
+# Metadata only
+uv run gmail_cli.py drive info <id>
+```
+
+Google-native files are exported as text: Docs → markdown, Sheets → CSV,
+Slides → plain text. Override the export format with `--mime`.
+
+To let Claude read a doc, just share it with your Gmail account and paste the link.
+
 ## Gmail Query Syntax
 
 Use [Gmail search operators](https://support.google.com/mail/answer/7190):
