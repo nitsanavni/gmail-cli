@@ -113,6 +113,22 @@ subscripts inside the bold run.
 Other flags: `--plain` (insert literally), `--keep-breaks` (keep source line
 breaks instead of unwrapping soft-wrapped paragraphs), `--font-size N`.
 
+### Create and watch docs
+
+```bash
+# Create a doc, optionally seeded
+uv run gmail_cli.py docs create "My doc" --file seed.md
+
+# Poll for changes and print a unified diff of each one
+uv run gmail_cli.py docs watch <id-or-url> --interval 10
+uv run gmail_cli.py docs watch <id> --once --timeout 900   # exit on first change
+```
+
+`watch` uses `revisionId` as the change signal and diffs the document text, so
+edits made by anyone (you, a collaborator, another tool) are reported. Detection
+latency is roughly the poll interval. Google has no public API for live cursor
+or keystroke presence — polling is the available mechanism.
+
 To let Claude read a doc, just share it with your Gmail account and paste the link.
 
 ## Gmail Query Syntax

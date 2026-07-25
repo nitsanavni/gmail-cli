@@ -5,7 +5,10 @@ The Docs API inserts plain text only, so markdown-ish source is parsed into
 """
 
 import argparse
+import difflib
 import sys
+import time
+from datetime import datetime
 
 from googleapiclient.errors import HttpError
 
@@ -185,8 +188,8 @@ def build_requests(text: str, ops: list[dict], at: int,
     for op in ops:
         if op['kind'] == 'bullet':
             requests.append({'createParagraphBullets': {
-                'range': {'startIndex': at + op['start'],
-                          'endIndex': at + op['end']},
+                'range': {'startIndex': at + u16[op['start']],
+                          'endIndex': at + u16[op['end']]},
                 'bulletPreset': 'BULLET_DISC_CIRCLE_SQUARE'}})
 
     return requests
@@ -243,3 +246,82 @@ def cmd_docs_append(args: argparse.Namespace) -> int:
     print(f"Appended {len(text)} chars to '{doc.get('title')}'")
     print(f'https://docs.google.com/document/d/{doc_id}/edit')
     return 0
+
+
+def doc_text(doc: dict) -> str:
+    """Flatten a document's body to plain text, one line per paragraph."""
+    lines: list[str] = []
+    for el in doc['body']['content']:
+        para = el.get('paragraph')
+        if not para:
+            continue
+        lines.append(''.join(
+            r.get('textRun', {}).get('content', '') for r in para['elements']
+        ).rstrip('\n'))
+    return '\n'.join(lines)
+
+
+def cmd_docs_create(args: argparse.Namespace) -> int:
+    """Create a new Google Doc, optionally seeded with content."""
+    service = authenticate_docs(args.account)
+    doc = service.documents().create(body={'title': args.title}).execute()
+    doc_id = doc['documentId']
+
+    if args.body or args.file:
+        content = read_content(args).rstrip('\n')
+        text, ops = parse_markdown(unwrap(content))
+        service.documents().batchUpdate(
+            documentId=doc_id,
+            body={'requests': build_requests(text, ops, 1)}).execute()
+
+    print(f"Created '{args.title}'")
+    print(f'https://docs.google.com/document/d/{doc_id}/edit')
+    print(doc_id)
+    return 0
+
+
+def cmd_docs_watch(args: argparse.Namespace) -> int:
+    """Poll a doc and print a unified diff whenever its text changes.
+
+    revisionId is the change signal; an edit that restores identical text still
+    bumps the revision but yields an empty diff, which is suppressed.
+    """
+    service = authenticate_docs(args.account)
+    doc_id = extract_id(args.doc_id)
+
+    doc = service.documents().get(documentId=doc_id).execute()
+    revision = doc.get('revisionId')
+    previous = doc_text(doc)
+    started = time.monotonic()
+    print(f"watching '{doc.get('title')}' every {args.interval}s", flush=True)
+
+    while True:
+        if args.timeout and time.monotonic() - started >= args.timeout:
+            print('watch: timeout reached', flush=True)
+            return 0
+        time.sleep(args.interval)
+
+        try:
+            doc = service.documents().get(documentId=doc_id).execute()
+        except HttpError as exc:
+            print(f'watch: fetch failed, retrying: {exc}', file=sys.stderr, flush=True)
+            continue
+
+        if doc.get('revisionId') == revision:
+            continue
+        revision = doc.get('revisionId')
+        current = doc_text(doc)
+
+        diff = list(difflib.unified_diff(
+            previous.split('\n'), current.split('\n'),
+            fromfile='before', tofile='after', lineterm='', n=args.context))
+        previous = current
+        if not diff:
+            continue
+
+        stamp = datetime.now().strftime('%H:%M:%S')
+        print(f'\n=== {stamp} ===', flush=True)
+        print('\n'.join(diff), flush=True)
+
+        if args.once:
+            return 0

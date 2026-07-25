@@ -13,7 +13,7 @@ from account_commands import (
 )
 from calendar_commands import cmd_cal_add, cmd_cal_calendars, cmd_cal_delete, cmd_cal_list
 from commands import cmd_archive, cmd_attachments, cmd_list, cmd_read, cmd_reply, cmd_send
-from docs_commands import cmd_docs_append
+from docs_commands import cmd_docs_append, cmd_docs_create, cmd_docs_watch
 from drive_commands import (
     cmd_drive_info,
     cmd_drive_list,
@@ -174,6 +174,25 @@ def main() -> int:
     docs_append_parser.add_argument('--dry-run', action='store_true',
                                     help='Preview without modifying the doc')
     docs_append_parser.set_defaults(func=cmd_docs_append)
+
+    docs_create_parser = docs_subparsers.add_parser('create', help='Create a new doc')
+    docs_create_parser.add_argument('title', help='Document title')
+    docs_create_parser.add_argument('--body', '-b', help='Initial content')
+    docs_create_parser.add_argument('--file', '-f', help='Initial content from file')
+    docs_create_parser.set_defaults(func=cmd_docs_create)
+
+    docs_watch_parser = docs_subparsers.add_parser(
+        'watch', help='Poll a doc and print a diff on each change')
+    docs_watch_parser.add_argument('doc_id', help='Doc ID or Docs URL')
+    docs_watch_parser.add_argument('--interval', '-i', type=float, default=10,
+                                   help='Seconds between polls (default: 10)')
+    docs_watch_parser.add_argument('--timeout', '-t', type=float,
+                                   help='Stop after N seconds')
+    docs_watch_parser.add_argument('--once', action='store_true',
+                                   help='Exit after the first change')
+    docs_watch_parser.add_argument('--context', '-C', type=int, default=1,
+                                   help='Diff context lines (default: 1)')
+    docs_watch_parser.set_defaults(func=cmd_docs_watch)
 
     # accounts command
     accounts_parser = subparsers.add_parser('accounts', help='Manage Gmail accounts')
