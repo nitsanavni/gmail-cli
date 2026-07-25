@@ -42,6 +42,11 @@ uv run gmail_cli.py drive search "quarterly"      # Match name or full text
 uv run gmail_cli.py drive read <file-id-or-url>   # Content to stdout
 uv run gmail_cli.py drive read <url> -o out.md    # Save to file (required for binaries)
 uv run gmail_cli.py drive info <file-id-or-url>   # Metadata
+
+# Google Docs (write)
+uv run gmail_cli.py docs append <id-or-url> --file section.md
+uv run gmail_cli.py docs append <id-or-url> --body "text"
+uv run gmail_cli.py docs append <id-or-url> --file x.md --dry-run  # preview only
 ```
 
 `drive read` accepts a bare file ID or any Drive/Docs URL. Google-native files are
@@ -66,5 +71,17 @@ exported: docs -> markdown, sheets -> CSV, slides -> plain text. Override with `
 - `gmail.modify` - archive
 - `calendar` - cal commands
 - `drive.readonly` - drive commands
+- `documents` - docs commands (read/write, all docs; Google has no per-file Docs scope)
 
-Changing this list invalidates existing tokens; the next command re-runs the OAuth flow.
+Adding a scope here does **not** invalidate existing tokens — a still-valid token is
+reused as-is and API calls fail with `ACCESS_TOKEN_SCOPE_INSUFFICIENT`. After changing
+this list, run:
+
+```bash
+uv run gmail_cli.py --account EMAIL accounts reauth
+```
+
+Note `--account` is a global flag: it goes before the subcommand, not after.
+
+The `docs` commands also require the Google Docs API to be enabled on the Cloud project
+behind `credentials.json` (separate from the Drive API).

@@ -14,7 +14,33 @@ from auth import authenticate_docs
 from drive_commands import extract_id
 
 HEADING_PREFIXES = [('### ', 3), ('## ', 2), ('# ', 1)]
-BOLD = re.compile(r'\*\*(.+?)\*\*')
+# Bold before italic, so '**x**' is not eaten as two italic markers.
+INLINE = re.compile(r'\*\*(.+?)\*\*|\*(.+?)\*')
+
+
+def unwrap(text: str) -> str:
+    """Join soft-wrapped lines within a paragraph.
+
+    Source files wrapped at a column width would otherwise become one Docs
+    paragraph per line. Blank lines, headings and bullets stay as breaks.
+    """
+    def is_heading(line: str) -> bool:
+        return any(line.startswith(p) for p, _ in HEADING_PREFIXES)
+
+    out: list[str] = []
+    for line in text.split('\n'):
+        stripped = line.strip()
+        # A line continues the previous one unless it starts a new block.
+        continues = (stripped
+                     and not is_heading(line)
+                     and not line.startswith('- ')
+                     and out and out[-1].strip()
+                     and not is_heading(out[-1]))
+        if continues:
+            out[-1] = out[-1].rstrip() + ' ' + stripped
+        else:
+            out.append(line)
+    return '\n'.join(out)
 
 
 def parse_markdown(text: str) -> tuple[str, list[dict]]:
@@ -42,17 +68,18 @@ def parse_markdown(text: str) -> tuple[str, list[dict]]:
                 bullet = True
                 line = line[2:]
 
-        # Strip bold markers, recording ranges against the cleaned line.
+        # Strip emphasis markers, recording ranges against the cleaned line.
         clean_parts: list[str] = []
-        bold_ranges: list[tuple[int, int]] = []
+        inline_ranges: list[tuple[int, int, str]] = []
         pos = 0
         clean_len = 0
-        for match in BOLD.finditer(line):
+        for match in INLINE.finditer(line):
             literal = line[pos:match.start()]
             clean_parts.append(literal)
             clean_len += len(literal)
-            inner = match.group(1)
-            bold_ranges.append((clean_len, clean_len + len(inner)))
+            inner = match.group(1) if match.group(1) is not None else match.group(2)
+            kind = 'bold' if match.group(1) is not None else 'italic'
+            inline_ranges.append((clean_len, clean_len + len(inner), kind))
             clean_parts.append(inner)
             clean_len += len(inner)
             pos = match.end()
@@ -66,9 +93,9 @@ def parse_markdown(text: str) -> tuple[str, list[dict]]:
                         'level': level})
         elif bullet:
             ops.append({'kind': 'bullet', 'start': offset, 'end': para_end})
-        for b_start, b_end in bold_ranges:
-            ops.append({'kind': 'bold', 'start': offset + b_start,
-                        'end': offset + b_end})
+        for i_start, i_end, kind in inline_ranges:
+            ops.append({'kind': kind, 'start': offset + i_start,
+                        'end': offset + i_end})
 
         out.append(clean + '\n')
         offset = para_end
@@ -76,9 +103,20 @@ def parse_markdown(text: str) -> tuple[str, list[dict]]:
     return ''.join(out), ops
 
 
-def build_requests(text: str, ops: list[dict], at: int) -> list[dict]:
-    """Build batchUpdate requests to insert text at `at` and style it."""
+def build_requests(text: str, ops: list[dict], at: int,
+                   font_size: float | None = None) -> list[dict]:
+    """Build batchUpdate requests to insert text at `at` and style it.
+
+    font_size (points) applies to body text only; headings keep the size from
+    their named style.
+    """
     end = at + len(text)
+    reset_style: dict = {'bold': False, 'italic': False}
+    reset_fields = 'bold,italic'
+    if font_size:
+        reset_style['fontSize'] = {'magnitude': font_size, 'unit': 'PT'}
+        reset_fields += ',fontSize'
+
     requests: list[dict] = [
         {'insertText': {'location': {'index': at}, 'text': text}},
         # Inserted text inherits style from the insertion point; reset first.
@@ -88,8 +126,8 @@ def build_requests(text: str, ops: list[dict], at: int) -> list[dict]:
             'fields': 'namedStyleType'}},
         {'updateTextStyle': {
             'range': {'startIndex': at, 'endIndex': end},
-            'textStyle': {'bold': False},
-            'fields': 'bold'}},
+            'textStyle': reset_style,
+            'fields': reset_fields}},
     ]
 
     for op in ops:
@@ -99,9 +137,14 @@ def build_requests(text: str, ops: list[dict], at: int) -> list[dict]:
                 'range': rng,
                 'paragraphStyle': {'namedStyleType': f"HEADING_{op['level']}"},
                 'fields': 'namedStyleType'}})
-        elif op['kind'] == 'bold':
+            if font_size:
+                # Clear the explicit size so the heading's named style wins.
+                requests.append({'updateTextStyle': {
+                    'range': rng, 'textStyle': {}, 'fields': 'fontSize'}})
+        elif op['kind'] in ('bold', 'italic'):
             requests.append({'updateTextStyle': {
-                'range': rng, 'textStyle': {'bold': True}, 'fields': 'bold'}})
+                'range': rng, 'textStyle': {op['kind']: True},
+                'fields': op['kind']}})
 
     # Bullets last: createParagraphBullets can shift indices.
     for op in ops:
@@ -134,7 +177,7 @@ def cmd_docs_append(args: argparse.Namespace) -> int:
     if args.plain:
         text, ops = content + '\n', []
     else:
-        text, ops = parse_markdown(content)
+        text, ops = parse_markdown(content if args.keep_breaks else unwrap(content))
     text = '\n' + text  # blank line separating from existing content
 
     try:
@@ -147,7 +190,7 @@ def cmd_docs_append(args: argparse.Namespace) -> int:
     at = doc['body']['content'][-1]['endIndex'] - 1
     ops = [{**op, 'start': op['start'] + 1, 'end': op['end'] + 1} for op in ops]
 
-    requests = build_requests(text, ops, at)
+    requests = build_requests(text, ops, at, args.font_size)
 
     if args.dry_run:
         print(f"Would append {len(text)} chars to '{doc.get('title')}' at index {at}")
