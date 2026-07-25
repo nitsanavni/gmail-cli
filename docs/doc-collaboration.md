@@ -113,11 +113,26 @@ similar) marker — otherwise the user sees their own name saying things they ne
 wrote. This matters more here than in the body, where the agent at least controls
 the whole paragraph.
 
-**Anchor, or the user never sees it.** An unanchored comment frequently does not
-render in the Docs UI at all — it exists only via the API. `drive comment
---anchor-text "..."` builds the anchor from the undocumented legacy shape
-`{"r": revision, "a":[{"txt":{"o": offset, "l": length}}]}`, where offset is the
-Docs index minus one. Note the user may still need to open the comment pane.
+**An agent cannot create an anchored comment.** Verified, after four attempts:
+
+- The `anchor` field on an editor-created comment is an opaque id like
+  `kix.m9e3i1xcxnch`, not the documented-looking JSON offsets.
+- Constructed JSON anchors (`{"r": rev, "a":[{"txt":{"o","l"}}]}`, both Drive and
+  Docs revision ids, both offset conventions) are **accepted by the API and
+  silently do not bind** — no highlight, no `quotedFileContent`.
+- A Docs *named range* id has the same `kix.*` shape, and using one as an anchor
+  is also accepted and also does not bind. The named range provably exists in the
+  document over the right span; editor anchors are simply a different namespace
+  and never appear in `namedRanges`.
+
+`quotedFileContent` is the reliable tell: populated means the anchor resolved.
+Every agent-created anchor leaves it empty.
+
+Consequence: agent-originated comments are unanchored, and unanchored comments
+render weakly or not at all. **Do not open a conversation in a comment** — write
+in the body instead. The workable direction is the reverse: the user anchors a
+comment to their selection, the agent replies in that thread, where the anchor
+and its quoted text come for free.
 
 **Comments need their own watcher.** Document text and comments are different
 APIs; `docs watch` sees no comment activity whatsoever. Use `drive

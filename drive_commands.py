@@ -222,58 +222,21 @@ def cmd_drive_comment_reply(args: argparse.Namespace) -> int:
     return 0
 
 
-def build_anchor(account: str | None, file_id: str, target: str) -> str | None:
-    """Build a Drive anchor JSON for the first occurrence of `target`.
-
-    Uses the undocumented legacy shape {"r": revision, "a":[{"txt":{"o","l"}}]}.
-    The offset is the Docs index minus one, since a document body starts at
-    index 1 while anchor offsets are zero-based.
-    """
-    import json
-
-    from auth import authenticate_docs
-
-    drive = authenticate_drive(account)
-    revisions = drive.revisions().list(
-        fileId=file_id, fields='revisions(id)').execute().get('revisions', [])
-    if not revisions:
-        return None
-
-    doc = authenticate_docs(account).documents().get(documentId=file_id).execute()
-    for el in doc['body']['content']:
-        para = el.get('paragraph')
-        if not para:
-            continue
-        for run in para['elements']:
-            text_run = run.get('textRun')
-            if not text_run:
-                continue
-            pos = text_run['content'].find(target)
-            if pos >= 0:
-                index = run['startIndex'] + pos
-                return json.dumps({'r': revisions[-1]['id'],
-                                   'a': [{'txt': {'o': index - 1,
-                                                  'l': len(target)}}]})
-    return None
-
-
 def cmd_drive_comment_add(args: argparse.Namespace) -> int:
-    """Create a comment, optionally anchored to a piece of text.
+    """Create an unanchored comment.
 
-    Anchor it whenever possible: an unanchored comment frequently does not
-    render in the Docs UI at all, so the user never sees it.
+    An agent cannot create an *anchored* comment: the anchor is an opaque
+    Docs-internal id (`kix.*`) minted by the editor. Constructed JSON offsets
+    are accepted by the API and silently do not bind, and a named-range id of
+    the same shape does not bind either (both verified — no highlight).
+
+    Unanchored comments render weakly or not at all, so prefer writing in the
+    body. The useful direction is the reverse: the user anchors, the agent
+    replies in-thread.
     """
     service = authenticate_drive(args.account)
     file_id = extract_id(args.file_id)
-
     body = {'content': args.body}
-    if args.anchor_text:
-        anchor = build_anchor(args.account, file_id, args.anchor_text)
-        if not anchor:
-            print(f'Error: text not found to anchor to: {args.anchor_text!r}',
-                  file=sys.stderr)
-            return 1
-        body['anchor'] = anchor
 
     try:
         comment = service.comments().create(
@@ -282,8 +245,8 @@ def cmd_drive_comment_add(args: argparse.Namespace) -> int:
         print(f'Error: comment failed: {exc}', file=sys.stderr)
         return 1
     mark_comment_seen(getattr(args, 'state', None), file_id, comment['id'])
-    where = f' anchored to {args.anchor_text!r}' if args.anchor_text else ' (unanchored)'
-    print(f"Created comment [{comment['id']}]{where}")
+    print(f"Created comment [{comment['id']}] (unanchored — the user may not "
+          f"see it; prefer `docs append`)")
     return 0
 
 

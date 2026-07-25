@@ -184,13 +184,9 @@ def main() -> int:
     drive_reply_parser.set_defaults(func=cmd_drive_comment_reply)
 
     drive_comment_parser = drive_subparsers.add_parser(
-        'comment', help='Add a comment to a file')
+        'comment', help='Add an unanchored comment (agents cannot anchor)')
     drive_comment_parser.add_argument('file_id', help='File ID or Drive/Docs URL')
     drive_comment_parser.add_argument('--body', '-b', required=True, help='Comment text')
-    drive_comment_parser.add_argument('--anchor-text',
-                                      help='Anchor to the first occurrence of this '
-                                           'text (strongly preferred: unanchored '
-                                           'comments often do not render in Docs)')
     drive_comment_parser.add_argument('--state', '-s',
                                       help='Mark this write as seen in a '
                                            'watch-comments state file')
