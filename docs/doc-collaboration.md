@@ -130,22 +130,27 @@ one it did not mint.
 browser automation (e.g. Claude in Chrome):
 
 1. Open the doc in the browser.
-2. **Triple-click** the target paragraph. This is the crucial trick: Docs renders
-   to a custom canvas, so DOM range selection does not apply, but triple-click
-   selects a whole paragraph natively and reliably.
+2. Ensure a selection exists. **The comment anchors to whatever is selected — the
+   agent does not have to be the one who selected it.** If the user has
+   highlighted a phrase, just use it.
+   To select programmatically: double-click a word, triple-click a paragraph.
+   (Docs renders to a custom canvas, so DOM range selection does not apply;
+   these native gestures do.)
 3. `Cmd+Alt+M` (macOS) / `Ctrl+Alt+M` — the comment box opens, already anchored.
-4. Type the comment, then click **Comment**.
+4. Type the comment, then **`Cmd+Enter`** to submit.
+
+Granularity is whatever the selection is — a single word anchors fine (verified,
+`quotedFileContent: 'watcher'`). The best division of labour: the user selects
+the exact span they care about, the agent supplies the comment.
 
 The result is indistinguishable from a human's: a real `kix.*` anchor with
 `quotedFileContent` populated, and the text highlighted in the UI.
 
-Gotcha: the comment box **grows as you type**, moving the Comment button. Take a
-screenshot after typing rather than reusing coordinates from before it.
+Gotcha: the comment box **grows as you type**, moving the Comment button, and it
+can end up below the fold. Submit with `Cmd+Enter` instead of clicking.
 
-Limits: paragraph granularity (triple-click selects a paragraph; a sub-phrase
-would need find-and-select or coordinate drags, both brittle), and it needs a
-live browser session — unavailable for headless or scheduled runs. For those,
-write in the body instead.
+The only real limit is that this needs a live browser session — unavailable for
+headless or scheduled runs. For those, write in the body instead.
 
 Verified independently before the above was known, and consistent with it:
 
