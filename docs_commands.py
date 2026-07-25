@@ -7,6 +7,7 @@ The Docs API inserts plain text only, so markdown-ish source is parsed into
 import argparse
 import difflib
 import json
+import re
 import sys
 import time
 from datetime import datetime
@@ -275,7 +276,8 @@ def write_state(path: str | None, doc_id: str, revision: str | None,
             {'doc_id': doc_id, 'revision': revision, 'text': text}))
 
 
-def sync_state(service, path: str | None, doc_id: str) -> None:
+def sync_state(service, path: str | None, doc_id: str,
+               ignore_prefix: str | None = None) -> None:
     """Re-baseline after our own write, so watch does not report it as a change.
 
     The Docs API exposes no author on a revision, so a watcher cannot tell our
@@ -285,19 +287,101 @@ def sync_state(service, path: str | None, doc_id: str) -> None:
     if not path:
         return
     doc = service.documents().get(documentId=doc_id).execute()
-    write_state(path, doc_id, doc.get('revisionId'), doc_text(doc))
+    write_state(path, doc_id, doc.get('revisionId'), doc_text(doc, ignore_prefix))
 
 
-def doc_text(doc: dict) -> str:
-    """Flatten a document's body to plain text, one line per paragraph."""
+def orient(lines: list[str], index: int) -> str:
+    """Name the section a line falls in, by scanning back for a heading.
+
+    Line numbers orient the tool, not the reader. Docs has no line numbers, so
+    a diff is far easier to place when each hunk says which section it is in.
+    """
+    for i in range(min(index, len(lines) - 1), -1, -1):
+        if lines[i].strip() and lines[i].strip() == lines[i].strip().rstrip(':'):
+            # Treat a short, title-ish line as a heading.
+            candidate = lines[i].strip()
+            if len(candidate) < 80 and not candidate.endswith('.'):
+                return candidate
+    return '(top of document)'
+
+
+def annotate_diff(diff: list[str], before: list[str]) -> list[str]:
+    """Replace @@ hunk headers with the section each hunk falls under."""
+    out: list[str] = []
+    for line in diff:
+        if line.startswith('@@'):
+            match = re.match(r'@@ -(\d+)', line)
+            if not match:
+                out.append(line)
+                continue
+            start = int(match.group(1))
+            out.append(f'@@ in: {orient(before, max(start - 2, 0))}')
+        else:
+            out.append(line)
+    return out
+
+
+def stamp_receipt(service, doc_id: str, prefix: str) -> None:
+    """Rewrite the doc's single receipt line in place, or create it at the end.
+
+    Gives a doc-only collaborator proof that the change was seen, without
+    waiting for the agent to compose a reply. Rewritten rather than appended so
+    it never accumulates.
+    """
+    text = f'{prefix} {datetime.now().strftime("%H:%M:%S")}'
+    doc = service.documents().get(documentId=doc_id).execute()
+    body = doc['body']['content']
+
+    existing = None
+    for el in body:
+        para = el.get('paragraph')
+        if not para:
+            continue
+        content = ''.join(r.get('textRun', {}).get('content', '')
+                          for r in para['elements'])
+        if content.startswith(prefix):
+            existing = el
+            break
+
+    if existing:
+        el = existing
+        # Stop short of the paragraph's newline: deleting it would merge this
+        # paragraph with the next, and Docs rejects it outright on the last one.
+        end = el['endIndex'] - 1
+        requests = [
+            {'deleteContentRange': {
+                'range': {'startIndex': el['startIndex'], 'endIndex': end}}},
+            {'insertText': {
+                'location': {'index': el['startIndex']}, 'text': text}},
+        ]
+    else:
+        at = body[-1]['endIndex'] - 1
+        requests = [{'insertText': {'location': {'index': at},
+                                    'text': '\n' + text}}]
+
+    service.documents().batchUpdate(
+        documentId=doc_id, body={'requests': requests}).execute()
+
+
+def doc_text(doc: dict, ignore_prefix: str | None = None) -> str:
+    """Flatten a document's body to plain text, one line per paragraph.
+
+    Paragraphs starting with ignore_prefix are excluded, so a receipt line that
+    a watcher maintains never registers as a change — that is what lets a fast
+    receipt watcher and a slow reading watcher run over the same doc without
+    triggering each other.
+    """
     lines: list[str] = []
     for el in doc['body']['content']:
         para = el.get('paragraph')
         if not para:
             continue
-        lines.append(''.join(
+        line = ''.join(
             r.get('textRun', {}).get('content', '') for r in para['elements']
-        ).rstrip('\n'))
+        ).rstrip('\n')
+        if ignore_prefix and line.startswith(ignore_prefix):
+            continue
+        lines.append(line)
     return '\n'.join(lines)
 
 
@@ -331,7 +415,7 @@ def cmd_docs_watch(args: argparse.Namespace) -> int:
 
     doc = service.documents().get(documentId=doc_id).execute()
     revision = doc.get('revisionId')
-    previous = doc_text(doc)
+    previous = doc_text(doc, args.ignore_prefix)
     started = time.monotonic()
 
     # With --state, the baseline persists across runs, so edits made while no
@@ -353,7 +437,7 @@ def cmd_docs_watch(args: argparse.Namespace) -> int:
           file=sys.stderr, flush=True)
 
     # Report anything missed since the saved baseline before polling.
-    current = doc_text(doc)
+    current = doc_text(doc, args.ignore_prefix)
     if current != previous:
         missed = list(difflib.unified_diff(
             previous.split('\n'), current.split('\n'),
@@ -397,8 +481,18 @@ def cmd_docs_watch(args: argparse.Namespace) -> int:
             # Change seen. With --debounce, hold it until the doc goes quiet, so
             # a diff is reported once the user stops typing rather than mid-word.
             revision = doc.get('revisionId')
-            pending = doc_text(doc)
+            pending = doc_text(doc, args.ignore_prefix)
             quiet_since = time.monotonic()
+            # Stamp on sight, before any debounce: proof of receipt should not
+            # wait on the reading cadence.
+            if args.receipt and pending != previous:
+                try:
+                    stamp_receipt(service, doc_id, args.receipt)
+                    revision = service.documents().get(
+                        documentId=doc_id).execute().get('revisionId')
+                except HttpError as exc:
+                    print(f'watch: receipt failed: {exc}',
+                          file=sys.stderr, flush=True)
             if args.debounce:
                 continue
 
@@ -409,6 +503,7 @@ def cmd_docs_watch(args: argparse.Namespace) -> int:
 
         current = pending
         pending = None
+        previous_lines = previous.split('\n')
 
         diff = list(difflib.unified_diff(
             previous.split('\n'), current.split('\n'),
@@ -428,7 +523,7 @@ def cmd_docs_watch(args: argparse.Namespace) -> int:
 
         stamp = datetime.now().strftime('%H:%M:%S')
         print(f'\n=== {stamp} ===', flush=True)
-        print('\n'.join(diff), flush=True)
+        print('\n'.join(annotate_diff(diff, previous_lines)), flush=True)
 
         if args.once:
             return 0

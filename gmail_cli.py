@@ -200,6 +200,12 @@ def main() -> int:
                                    help='Stop after N seconds')
     docs_watch_parser.add_argument('--once', action='store_true',
                                    help='Exit after the first change')
+    docs_watch_parser.add_argument('--receipt',
+                                   help='Stamp/refresh a receipt line with this '
+                                        'prefix in the doc on every change seen')
+    docs_watch_parser.add_argument('--ignore-prefix',
+                                   help='Ignore paragraphs starting with this '
+                                        'text (e.g. another watcher\'s receipt)')
     docs_watch_parser.add_argument('--state', '-s',
                                    help='Persist the baseline here so restarts '
                                         'report edits made while not watching')
