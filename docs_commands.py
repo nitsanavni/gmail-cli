@@ -378,6 +378,15 @@ def cmd_docs_watch(args: argparse.Namespace) -> int:
             print(f'watch: fetch failed, retrying: {exc}', file=sys.stderr, flush=True)
             continue
 
+        # Re-read the state file each poll: a writer (our own `append --state`)
+        # may have re-baselined it since we started. Without this a persistent
+        # watcher keeps an in-memory baseline and wakes on our own writes.
+        if state_path and state_path.exists():
+            saved = json.loads(state_path.read_text())
+            if saved.get('doc_id') == doc_id and saved.get('text') != previous:
+                previous = saved.get('text', previous)
+                revision = saved.get('revision')
+
         if doc.get('revisionId') == revision:
             continue
         revision = doc.get('revisionId')
@@ -386,6 +395,14 @@ def cmd_docs_watch(args: argparse.Namespace) -> int:
         diff = list(difflib.unified_diff(
             previous.split('\n'), current.split('\n'),
             fromfile='before', tofile='after', lineterm='', n=args.context))
+        # A write that landed between our fetch and the writer's re-baseline
+        # would otherwise surface as a spurious diff; drop it if the state file
+        # already matches what we just read.
+        if diff and state_path and state_path.exists():
+            saved = json.loads(state_path.read_text())
+            if saved.get('doc_id') == doc_id and saved.get('text') == current:
+                diff = []
+
         previous = current
         save_state(revision, previous)
         if not diff:
