@@ -13,6 +13,7 @@ from account_commands import (
 )
 from calendar_commands import cmd_cal_add, cmd_cal_calendars, cmd_cal_delete, cmd_cal_list
 from commands import cmd_archive, cmd_attachments, cmd_list, cmd_read, cmd_reply, cmd_send
+from docs_commands import cmd_docs_append
 from drive_commands import (
     cmd_drive_info,
     cmd_drive_list,
@@ -154,6 +155,21 @@ def main() -> int:
     drive_info_parser = drive_subparsers.add_parser('info', help='Show file metadata')
     drive_info_parser.add_argument('file_id', help='File ID or Drive/Docs URL')
     drive_info_parser.set_defaults(func=cmd_drive_info)
+
+    # docs command
+    docs_parser = subparsers.add_parser('docs', help='Google Docs (write)')
+    docs_subparsers = docs_parser.add_subparsers(dest='docs_action', required=True)
+
+    docs_append_parser = docs_subparsers.add_parser(
+        'append', help='Append content to the end of a doc')
+    docs_append_parser.add_argument('doc_id', help='Doc ID or Docs URL')
+    docs_append_parser.add_argument('--body', '-b', help='Content to append')
+    docs_append_parser.add_argument('--file', '-f', help='Read content from file')
+    docs_append_parser.add_argument('--plain', action='store_true',
+                                    help='Insert literally, no markdown styling')
+    docs_append_parser.add_argument('--dry-run', action='store_true',
+                                    help='Preview without modifying the doc')
+    docs_append_parser.set_defaults(func=cmd_docs_append)
 
     # accounts command
     accounts_parser = subparsers.add_parser('accounts', help='Manage Gmail accounts')
