@@ -192,6 +192,10 @@ def main() -> int:
     docs_watch_parser.add_argument('doc_id', help='Doc ID or Docs URL')
     docs_watch_parser.add_argument('--interval', '-i', type=float, default=10,
                                    help='Seconds between polls (default: 10)')
+    docs_watch_parser.add_argument('--debounce', '-d', type=float, default=0,
+                                   help='Report only after the doc has been '
+                                        'quiet this many seconds (avoids '
+                                        'reporting mid-sentence)')
     docs_watch_parser.add_argument('--timeout', '-t', type=float,
                                    help='Stop after N seconds')
     docs_watch_parser.add_argument('--once', action='store_true',

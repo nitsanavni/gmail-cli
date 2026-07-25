@@ -369,6 +369,9 @@ def cmd_docs_watch(args: argparse.Namespace) -> int:
             return 0
     save_state(revision, previous)
 
+    pending: str | None = None   # text seen but not yet reported (debouncing)
+    quiet_since = 0.0
+
     while True:
         if args.timeout and time.monotonic() - started >= args.timeout:
             print('watch: timeout reached', file=sys.stderr, flush=True)
@@ -390,10 +393,22 @@ def cmd_docs_watch(args: argparse.Namespace) -> int:
                 previous = saved.get('text', previous)
                 revision = saved.get('revision')
 
-        if doc.get('revisionId') == revision:
+        if doc.get('revisionId') != revision:
+            # Change seen. With --debounce, hold it until the doc goes quiet, so
+            # a diff is reported once the user stops typing rather than mid-word.
+            revision = doc.get('revisionId')
+            pending = doc_text(doc)
+            quiet_since = time.monotonic()
+            if args.debounce:
+                continue
+
+        if pending is None:
             continue
-        revision = doc.get('revisionId')
-        current = doc_text(doc)
+        if args.debounce and time.monotonic() - quiet_since < args.debounce:
+            continue
+
+        current = pending
+        pending = None
 
         diff = list(difflib.unified_diff(
             previous.split('\n'), current.split('\n'),
