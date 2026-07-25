@@ -178,6 +178,25 @@ the watcher's state file — the same contract as `docs append --state`. Expect
 this failure mode on every new surface: any channel the agent can write to and
 watch will feed itself unless the writer marks its output.
 
+## Picking up the user's selection
+
+The Docs selection is **not** in the DOM — `window.getSelection()` returns empty
+with `rangeCount: 0`, because Docs renders to a custom canvas. There is no JS
+route to read it.
+
+The system clipboard bridges it instead: with a selection active, `Cmd+C` in the
+browser, then `pbpaste` in the shell returns exactly the selected text
+(verified). Useful in both directions:
+
+- The user selects a passage and copies; the agent reads `pbpaste` and knows
+  precisely what they mean — no paragraph-guessing, no anchors.
+- The agent triple-clicks a paragraph via browser automation, copies, and reads
+  back what it just selected to confirm before acting on it.
+
+Treat the clipboard as the user's, not a scratch space: read it when the user has
+just pointed at something, do not clobber it, and remember it may hold unrelated
+or sensitive content from another app.
+
 ## Etiquette
 
 - **Acknowledge in the doc before doing the work.** The person may be working
