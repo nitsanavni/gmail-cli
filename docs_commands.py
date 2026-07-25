@@ -261,7 +261,7 @@ def cmd_docs_append(args: argparse.Namespace) -> int:
         print(f'Error: append failed: {exc}', file=sys.stderr)
         return 1
 
-    sync_state(service, args.state, doc_id)
+    sync_state(service, args.state, doc_id, getattr(args, 'ignore_prefix', None))
 
     print(f"Appended {len(text)} chars to '{doc.get('title')}'")
     print(f'https://docs.google.com/document/d/{doc_id}/edit')

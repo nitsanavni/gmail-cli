@@ -15,6 +15,8 @@ from calendar_commands import cmd_cal_add, cmd_cal_calendars, cmd_cal_delete, cm
 from commands import cmd_archive, cmd_attachments, cmd_list, cmd_read, cmd_reply, cmd_send
 from docs_commands import cmd_docs_append, cmd_docs_create, cmd_docs_watch
 from drive_commands import (
+    cmd_drive_comment_reply,
+    cmd_drive_comments,
     cmd_drive_info,
     cmd_drive_list,
     cmd_drive_read,
@@ -156,6 +158,22 @@ def main() -> int:
     drive_info_parser.add_argument('file_id', help='File ID or Drive/Docs URL')
     drive_info_parser.set_defaults(func=cmd_drive_info)
 
+    drive_comments_parser = drive_subparsers.add_parser(
+        'comments', help='List comment threads on a file')
+    drive_comments_parser.add_argument('file_id', help='File ID or Drive/Docs URL')
+    drive_comments_parser.add_argument('--all', action='store_true',
+                                       help='Include resolved comments')
+    drive_comments_parser.set_defaults(func=cmd_drive_comments)
+
+    drive_reply_parser = drive_subparsers.add_parser(
+        'reply', help='Reply to a comment thread')
+    drive_reply_parser.add_argument('file_id', help='File ID or Drive/Docs URL')
+    drive_reply_parser.add_argument('comment_id', help='Comment thread ID')
+    drive_reply_parser.add_argument('--body', '-b', required=True, help='Reply text')
+    drive_reply_parser.add_argument('--resolve', action='store_true',
+                                    help='Resolve the thread with this reply')
+    drive_reply_parser.set_defaults(func=cmd_drive_comment_reply)
+
     # docs command
     docs_parser = subparsers.add_parser('docs', help='Google Docs (write)')
     docs_subparsers = docs_parser.add_subparsers(dest='docs_action', required=True)
@@ -179,6 +197,10 @@ def main() -> int:
     docs_append_parser.add_argument('--state', '-s',
                                     help="Re-baseline this watch state file, so "
                                          "watch does not report our own write")
+    docs_append_parser.add_argument('--ignore-prefix',
+                                    help='Exclude paragraphs with this prefix '
+                                         'when re-baselining (must match the '
+                                         "watcher's --ignore-prefix)")
     docs_append_parser.set_defaults(func=cmd_docs_append)
 
     docs_create_parser = docs_subparsers.add_parser('create', help='Create a new doc')

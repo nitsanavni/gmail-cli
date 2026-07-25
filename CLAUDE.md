@@ -49,6 +49,10 @@ uv run gmail_cli.py docs append <id-or-url> --body "text"
 uv run gmail_cli.py docs append <id-or-url> --file x.md --dry-run  # preview only
 ```
 
+**Collaborating live in a doc with a human: read `docs/doc-collaboration.md` first.**
+It covers the two-watcher setup and the traps (self-wake, restart gap, UTF-16
+offsets, inherited styling, mid-typing) that each cost real debugging time here.
+
 `docs append` markup: `#`/`##`/`###` headings, `- ` bullets, `**bold**`,
 `*italic*`, `~subscript~`, `^superscript^` — markers nest.
 

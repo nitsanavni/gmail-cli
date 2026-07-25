@@ -139,3 +139,61 @@ def cmd_drive_info(args: argparse.Namespace) -> int:
     for key, value in meta.items():
         print(f'{key}: {value}')
     return 0
+
+
+COMMENT_FIELDS = ('comments(id,author(displayName),content,quotedFileContent(value),'
+                  'resolved,createdTime,replies(id,author(displayName),content,createdTime))')
+
+
+def cmd_drive_comments(args: argparse.Namespace) -> int:
+    """List comment threads on a file.
+
+    Comments are anchored to a selection, so they carry their own context: the
+    quoted text says exactly what the commenter meant, with no inference.
+    """
+    service = authenticate_drive(args.account)
+    result = service.comments().list(
+        fileId=extract_id(args.file_id),
+        fields=COMMENT_FIELDS,
+        includeDeleted=False,
+        pageSize=100,
+    ).execute()
+
+    threads = [c for c in result.get('comments', [])
+               if args.all or not c.get('resolved')]
+    if not threads:
+        print('No open comments.' if not args.all else 'No comments.')
+        return 0
+
+    for comment in threads:
+        mark = 'resolved' if comment.get('resolved') else 'open'
+        author = comment.get('author', {}).get('displayName', '?')
+        quoted = (comment.get('quotedFileContent') or {}).get('value', '')
+        print(f"[{comment['id']}] ({mark}) {author}: {comment.get('content', '')}")
+        if quoted:
+            print(f'    on: {quoted!r}')
+        for reply in comment.get('replies', []):
+            r_author = reply.get('author', {}).get('displayName', '?')
+            print(f"    ↳ [{reply['id']}] {r_author}: {reply.get('content', '')}")
+    return 0
+
+
+def cmd_drive_comment_reply(args: argparse.Namespace) -> int:
+    """Reply to a comment thread, optionally resolving it."""
+    service = authenticate_drive(args.account)
+    file_id = extract_id(args.file_id)
+
+    body = {'content': args.body}
+    if args.resolve:
+        body['action'] = 'resolve'
+
+    try:
+        reply = service.replies().create(
+            fileId=file_id, commentId=args.comment_id,
+            body=body, fields='id,content').execute()
+    except HttpError as exc:
+        print(f'Error: reply failed: {exc}', file=sys.stderr)
+        return 1
+
+    print(f"Replied [{reply['id']}]" + (' and resolved' if args.resolve else ''))
+    return 0
