@@ -165,6 +165,9 @@ def main() -> int:
     docs_append_parser.add_argument('doc_id', help='Doc ID or Docs URL')
     docs_append_parser.add_argument('--body', '-b', help='Content to append')
     docs_append_parser.add_argument('--file', '-f', help='Read content from file')
+    docs_append_parser.add_argument('--after',
+                                    help='Insert below the paragraph containing '
+                                         'this text, instead of at the end')
     docs_append_parser.add_argument('--font-size', type=float,
                                     help='Body font size in points (headings unaffected)')
     docs_append_parser.add_argument('--keep-breaks', action='store_true',

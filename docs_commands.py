@@ -226,8 +226,23 @@ def cmd_docs_append(args: argparse.Namespace) -> int:
         print(f'Error: cannot open {doc_id}: {exc}', file=sys.stderr)
         return 1
 
-    # End of body; -1 stays inside the final paragraph's newline.
-    at = doc['body']['content'][-1]['endIndex'] - 1
+    if args.after:
+        # Insert just past the anchor paragraph's newline, i.e. directly below it.
+        matches = [el for el in doc['body']['content']
+                   if el.get('paragraph') and args.after in ''.join(
+                       r.get('textRun', {}).get('content', '')
+                       for r in el['paragraph']['elements'])]
+        if not matches:
+            print(f'Error: no paragraph contains {args.after!r}', file=sys.stderr)
+            return 1
+        if len(matches) > 1:
+            print(f'Error: {len(matches)} paragraphs contain {args.after!r}; '
+                  'use a longer anchor', file=sys.stderr)
+            return 1
+        at = matches[0]['endIndex'] - 1
+    else:
+        # End of body; -1 stays inside the final paragraph's newline.
+        at = doc['body']['content'][-1]['endIndex'] - 1
     ops = [{**op, 'start': op['start'] + 1, 'end': op['end'] + 1} for op in ops]
 
     requests = build_requests(text, ops, at, args.font_size)
