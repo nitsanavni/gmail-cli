@@ -90,6 +90,32 @@ attribution note for a whole section). A mixed-authorship doc has no diff view
 or avatars; without a label the reader cannot separate their thinking from the
 agent's. Requested explicitly, then confirmed unprompted as more readable.
 
+## Comments as a collaboration surface
+
+Less intrusive than writing in the body, and anchored: the user selects the text
+they mean and comments on it, so the thread carries its own context. The agent
+replies in-thread and the document body stays the user's.
+
+```bash
+gmail drive comments <doc>              # open threads, with the text each anchors to
+gmail drive reply <doc> <comment-id> --body "..." [--resolve]
+gmail drive comment <doc> --body "..."  # unanchored, agent-initiated
+```
+
+Reading comments needs only `drive.readonly`; creating or replying needs a Drive
+**write** scope (`drive.file` reaches only app-created files; `drive` reaches
+everything). Ask the user before widening this — it is the broadest scope here.
+
+**Attribution is the user's, not the agent's.** The token belongs to the user, so
+every comment and reply is authored by *them* in the Drive UI. There is no way to
+present a separate identity. Always open the text with an explicit `Claude:` (or
+similar) marker — otherwise the user sees their own name saying things they never
+wrote. This matters more here than in the body, where the agent at least controls
+the whole paragraph.
+
+Anchoring to a range is not usefully exposed by the API: anchored threads are
+created by a human selecting text. Replying to those is the useful direction.
+
 ## Etiquette
 
 - **Acknowledge in the doc before doing the work.** The person may be working

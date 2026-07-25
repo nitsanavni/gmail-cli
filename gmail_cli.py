@@ -15,6 +15,8 @@ from calendar_commands import cmd_cal_add, cmd_cal_calendars, cmd_cal_delete, cm
 from commands import cmd_archive, cmd_attachments, cmd_list, cmd_read, cmd_reply, cmd_send
 from docs_commands import cmd_docs_append, cmd_docs_create, cmd_docs_watch
 from drive_commands import (
+    cmd_drive_comment_add,
+    cmd_drive_comment_delete,
     cmd_drive_comment_reply,
     cmd_drive_comments,
     cmd_drive_info,
@@ -173,6 +175,18 @@ def main() -> int:
     drive_reply_parser.add_argument('--resolve', action='store_true',
                                     help='Resolve the thread with this reply')
     drive_reply_parser.set_defaults(func=cmd_drive_comment_reply)
+
+    drive_comment_parser = drive_subparsers.add_parser(
+        'comment', help='Add a comment to a file')
+    drive_comment_parser.add_argument('file_id', help='File ID or Drive/Docs URL')
+    drive_comment_parser.add_argument('--body', '-b', required=True, help='Comment text')
+    drive_comment_parser.set_defaults(func=cmd_drive_comment_add)
+
+    drive_uncomment_parser = drive_subparsers.add_parser(
+        'uncomment', help='Delete a comment thread')
+    drive_uncomment_parser.add_argument('file_id', help='File ID or Drive/Docs URL')
+    drive_uncomment_parser.add_argument('comment_id', help='Comment thread ID')
+    drive_uncomment_parser.set_defaults(func=cmd_drive_comment_delete)
 
     # docs command
     docs_parser = subparsers.add_parser('docs', help='Google Docs (write)')

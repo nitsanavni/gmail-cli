@@ -197,3 +197,32 @@ def cmd_drive_comment_reply(args: argparse.Namespace) -> int:
 
     print(f"Replied [{reply['id']}]" + (' and resolved' if args.resolve else ''))
     return 0
+
+
+def cmd_drive_comment_add(args: argparse.Namespace) -> int:
+    """Create a comment on a file (unanchored).
+
+    Anchoring to a text range is not exposed usefully by the Drive API; anchored
+    comments are normally created by a human selecting text. Replying to those
+    threads is the useful direction for an agent.
+    """
+    service = authenticate_drive(args.account)
+    try:
+        comment = service.comments().create(
+            fileId=extract_id(args.file_id),
+            body={'content': args.body},
+            fields='id,content').execute()
+    except HttpError as exc:
+        print(f'Error: comment failed: {exc}', file=sys.stderr)
+        return 1
+    print(f"Created comment [{comment['id']}]")
+    return 0
+
+
+def cmd_drive_comment_delete(args: argparse.Namespace) -> int:
+    """Delete a comment thread."""
+    service = authenticate_drive(args.account)
+    service.comments().delete(
+        fileId=extract_id(args.file_id), commentId=args.comment_id).execute()
+    print(f'Deleted comment [{args.comment_id}]')
+    return 0

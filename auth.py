@@ -16,7 +16,9 @@ SCOPES = [
     'https://www.googleapis.com/auth/gmail.compose',
     'https://www.googleapis.com/auth/gmail.modify',
     'https://www.googleapis.com/auth/calendar',
-    'https://www.googleapis.com/auth/drive.readonly',
+    # Full drive (supersedes drive.readonly): comment replies need write access,
+    # and drive.file would not reach pre-existing docs.
+    'https://www.googleapis.com/auth/drive',
     'https://www.googleapis.com/auth/documents',
 ]
 
