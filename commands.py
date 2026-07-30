@@ -399,6 +399,60 @@ def cmd_attachments(args: argparse.Namespace) -> int:
     return 0
 
 
+def build_envelope(msg: dict, attachments: list[dict]) -> dict:
+    """Describe a message as the JSON an agent reads instead of the raw API shape."""
+    payload = msg.get('payload', {})
+    headers = payload.get('headers', [])
+    body = get_body(payload)
+
+    return {
+        'source': 'gmail-cli',
+        'id': msg['id'],
+        'thread_id': msg['threadId'],
+        'ts': iso_timestamp(msg.get('internalDate', '0')),
+        'from': get_header(headers, 'From'),
+        'to': get_header(headers, 'To'),
+        'cc': get_header(headers, 'Cc'),
+        'subject': get_header(headers, 'Subject'),
+        'labels': msg.get('labelIds', []),
+        'body_markdown': body.strip(),
+        'attachments': [
+            {'filename': a['filename'], 'mime_type': a['mime_type'], 'size': a['size']}
+            for a in attachments
+        ],
+    }
+
+
+def cmd_materialize(args: argparse.Namespace) -> int:
+    """Write an email into a directory as envelope.json plus attachments/."""
+    service = authenticate(args.account)
+
+    try:
+        msg = service.users().messages().get(
+            userId='me', id=args.id, format='full'
+        ).execute()
+    except HttpError as exc:
+        print(f'Error: cannot read message {args.id}: {exc}', file=sys.stderr)
+        return 1
+
+    output_dir = Path(args.output)
+    attachments_dir = output_dir / 'attachments'
+    attachments_dir.mkdir(parents=True, exist_ok=True)
+
+    saved = save_attachments(
+        service, args.id, msg.get('payload', {}), attachments_dir, run_scoped_path()
+    )
+    envelope = build_envelope(msg, saved)
+
+    envelope_path = output_dir / 'envelope.json'
+    envelope_path.write_text(json.dumps(envelope, indent=2, ensure_ascii=False) + '\n')
+
+    print(f'Materialized {args.id} -> {output_dir}')
+    print(f'  envelope.json, {len(saved)} attachment(s)')
+
+    return 0
+
+
 def cmd_archive(args: argparse.Namespace) -> int:
     """Archive emails by removing the INBOX label."""
     service = authenticate(args.account)

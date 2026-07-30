@@ -12,7 +12,15 @@ from account_commands import (
     cmd_accounts_remove,
 )
 from calendar_commands import cmd_cal_add, cmd_cal_calendars, cmd_cal_delete, cmd_cal_list
-from commands import cmd_archive, cmd_attachments, cmd_list, cmd_read, cmd_reply, cmd_send
+from commands import (
+    cmd_archive,
+    cmd_attachments,
+    cmd_list,
+    cmd_materialize,
+    cmd_read,
+    cmd_reply,
+    cmd_send,
+)
 from docs_commands import cmd_docs_append, cmd_docs_create, cmd_docs_watch
 from guide_commands import cmd_guide, guide_hint
 from drive_commands import (
@@ -87,6 +95,14 @@ def main() -> int:
     attach_parser.add_argument('id', help='Message ID')
     attach_parser.add_argument('--output', '-o', help='Output directory (default: current)')
     attach_parser.set_defaults(func=cmd_attachments)
+
+    # materialize command
+    materialize_parser = subparsers.add_parser(
+        'materialize', help='Write an email to a directory an agent can read')
+    materialize_parser.add_argument('id', help='Message ID')
+    materialize_parser.add_argument('--output', '-o', required=True,
+                                    help='Output directory (created if missing)')
+    materialize_parser.set_defaults(func=cmd_materialize)
 
     # archive command
     archive_parser = subparsers.add_parser('archive', help='Archive emails')
