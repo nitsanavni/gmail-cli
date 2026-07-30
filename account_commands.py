@@ -34,10 +34,14 @@ def cmd_accounts_list(args: argparse.Namespace) -> int:
     return 0
 
 
+def requested_headless(args: argparse.Namespace) -> bool | None:
+    """--headless forces the paste flow; without it, let auth auto-detect."""
+    return True if getattr(args, 'headless', False) else None
+
+
 def cmd_accounts_add(args: argparse.Namespace) -> int:
     """Add new account via OAuth flow."""
-    print('Opening browser for authentication...')
-    run_oauth_flow()
+    run_oauth_flow(headless=requested_headless(args))
     return 0
 
 
@@ -52,8 +56,7 @@ def cmd_accounts_reauth(args: argparse.Namespace) -> int:
     token_path = get_token_path(email)
     if token_path.exists():
         token_path.unlink()
-    print('Opening browser for authentication...')
-    run_oauth_flow()
+    run_oauth_flow(headless=requested_headless(args))
     return 0
 
 

@@ -293,14 +293,17 @@ def main() -> int:
     ).set_defaults(accounts_func=cmd_accounts_list)
 
     # accounts add
-    accounts_subparsers.add_parser(
-        'add', help='Add new account'
-    ).set_defaults(accounts_func=cmd_accounts_add)
+    headless_help = 'Authorize by pasting a URL back (no browser on this machine)'
+    add_parser = accounts_subparsers.add_parser('add', help='Add new account')
+    add_parser.add_argument('--headless', action='store_true', help=headless_help)
+    add_parser.set_defaults(accounts_func=cmd_accounts_add)
 
     # accounts reauth
-    accounts_subparsers.add_parser(
+    reauth_parser = accounts_subparsers.add_parser(
         'reauth', help='Re-authenticate account (fix expired/revoked tokens)'
-    ).set_defaults(accounts_func=cmd_accounts_reauth)
+    )
+    reauth_parser.add_argument('--headless', action='store_true', help=headless_help)
+    reauth_parser.set_defaults(accounts_func=cmd_accounts_reauth)
 
     # accounts remove
     remove_parser = accounts_subparsers.add_parser('remove', help='Remove account')
