@@ -35,6 +35,10 @@ uv run gmail_cli.py reply <message-id> --body "Reply text" --draft
 uv run gmail_cli.py reply <message-id> --body "Reply text" --cc "cc@example.com"
 uv run gmail_cli.py reply <message-id> --body "Reply text" --bcc "hidden@example.com"
 
+# Download attachments
+uv run gmail_cli.py attachments <message-id>              # Into the current directory
+uv run gmail_cli.py attachments <message-id> -o ./out     # Created if missing
+
 # Google Drive (read-only)
 uv run gmail_cli.py drive list                    # Recently modified files
 uv run gmail_cli.py drive list --shared           # Only files shared with me
@@ -63,6 +67,12 @@ Two index traps when extending `docs append`:
   must clear `baselineOffset` too, or appending after subscripted math renders
   the whole section as subscript.
 
+`attachments` walks the part tree recursively, so it also saves inline images — a
+screenshot pasted into a body is nested two levels down and a top-level-only scan
+reports "No attachments found." Filenames come from the sender and are reduced to a
+bare name before use; same-named attachments get a `-1`, `-2` suffix rather than
+overwriting each other.
+
 `drive read` accepts a bare file ID or any Drive/Docs URL. Google-native files are
 exported: docs -> markdown, sheets -> CSV, slides -> plain text. Override with `--mime`.
 
@@ -87,9 +97,11 @@ exported: docs -> markdown, sheets -> CSV, slides -> plain text. Override with `
 - `drive.readonly` - drive commands
 - `documents` - docs commands (read/write, all docs; Google has no per-file Docs scope)
 
-Adding a scope here does **not** invalidate existing tokens — a still-valid token is
-reused as-is and API calls fail with `ACCESS_TOKEN_SCOPE_INSUFFICIENT`. After changing
-this list, run:
+Adding a scope here invalidates existing tokens on purpose: `get_credentials` compares
+`SCOPES` against the scopes recorded in the token file and re-runs consent when the token
+is short, rather than letting the call fail with `ACCESS_TOKEN_SCOPE_INSUFFICIENT`. So the
+next command after a scope change prompts for authorization. To re-consent deliberately
+instead of on next use:
 
 ```bash
 uv run gmail_cli.py --account EMAIL accounts reauth
@@ -97,5 +109,18 @@ uv run gmail_cli.py --account EMAIL accounts reauth
 
 Note `--account` is a global flag: it goes before the subcommand, not after.
 
+The check reads the token file directly because `Credentials.from_authorized_user_info()`
+overwrites the token's own scopes with the requested ones — `creds.scopes` always reports
+the full list and can never reveal a short token.
+
 The `docs` commands also require the Google Docs API to be enabled on the Cloud project
 behind `credentials.json` (separate from the Drive API).
+
+## Tests
+
+```bash
+uv run pytest
+```
+
+Tests mock the Google service objects, so they need no credentials and make no network
+calls. There is no CI — run them locally before pushing.
