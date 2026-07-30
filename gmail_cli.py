@@ -15,6 +15,8 @@ from calendar_commands import cmd_cal_add, cmd_cal_calendars, cmd_cal_delete, cm
 from commands import (
     cmd_archive,
     cmd_attachments,
+    cmd_label,
+    cmd_labels,
     cmd_list,
     cmd_materialize,
     cmd_read,
@@ -103,6 +105,20 @@ def main() -> int:
     materialize_parser.add_argument('--output', '-o', required=True,
                                     help='Output directory (created if missing)')
     materialize_parser.set_defaults(func=cmd_materialize)
+
+    # label command
+    label_parser = subparsers.add_parser('label', help='Add/remove labels on a message')
+    label_parser.add_argument('id', help='Message ID')
+    label_parser.add_argument('--add', action='append',
+                              help='Label to apply, created if missing (repeatable)')
+    label_parser.add_argument('--remove', action='append',
+                              help='Label to remove (repeatable)')
+    label_parser.set_defaults(func=cmd_label)
+
+    # labels command
+    subparsers.add_parser(
+        'labels', help='List labels on the account'
+    ).set_defaults(func=cmd_labels)
 
     # archive command
     archive_parser = subparsers.add_parser('archive', help='Archive emails')

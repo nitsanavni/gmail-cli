@@ -468,6 +468,91 @@ def cmd_archive(args: argparse.Namespace) -> int:
     return 0
 
 
+def label_ids_by_name(service) -> dict[str, str]:
+    """Map every label name on the account to its id, system labels included."""
+    result = service.users().labels().list(userId='me').execute()
+    return {label['name']: label['id'] for label in result.get('labels', [])}
+
+
+def ensure_label(service, name: str, known: dict[str, str]) -> str:
+    """Return the id of a label, creating it when the account has none by that name.
+
+    Gmail has no nesting API — 'factory/seen' is a plain label name, and the
+    slash is what the sidebar renders as a child of 'factory'.
+    """
+    if name in known:
+        return known[name]
+
+    created = service.users().labels().create(
+        userId='me',
+        body={
+            'name': name,
+            'labelListVisibility': 'labelShow',
+            'messageListVisibility': 'show',
+        },
+    ).execute()
+
+    known[name] = created['id']
+    print(f'Created label: {name}')
+    return created['id']
+
+
+def cmd_labels(args: argparse.Namespace) -> int:
+    """List the labels on the account."""
+    service = authenticate(args.account)
+
+    result = service.users().labels().list(userId='me').execute()
+    labels = result.get('labels', [])
+    if not labels:
+        print('No labels found.')
+        return 0
+
+    for label in sorted(labels, key=lambda x: (x.get('type') != 'system', x['name'])):
+        print(f"{label['name']}\t{label['id']}")
+
+    return 0
+
+
+def cmd_label(args: argparse.Namespace) -> int:
+    """Add and/or remove labels on a message."""
+    if not args.add and not args.remove:
+        print('Error: --add or --remove required', file=sys.stderr)
+        return 1
+
+    service = authenticate(args.account)
+    known = label_ids_by_name(service)
+
+    body = {}
+    if args.add:
+        body['addLabelIds'] = [ensure_label(service, name, known) for name in args.add]
+
+    removing = []
+    for name in args.remove or []:
+        # The message already lacks a label that does not exist, so removing one
+        # is a no-op rather than a failure — but say so, since it is usually a typo.
+        if name in known:
+            removing.append(name)
+        else:
+            print(f'No such label, nothing to remove: {name}', file=sys.stderr)
+    if removing:
+        body['removeLabelIds'] = [known[name] for name in removing]
+
+    if not body:
+        print('Nothing to do.')
+        return 0
+
+    try:
+        service.users().messages().modify(userId='me', id=args.id, body=body).execute()
+    except HttpError as exc:
+        print(f'Error: cannot modify message {args.id}: {exc}', file=sys.stderr)
+        return 1
+
+    changes = [f'+{name}' for name in args.add or []] + [f'-{name}' for name in removing]
+    print(f"{args.id}: {' '.join(changes)}")
+
+    return 0
+
+
 def cmd_reply(args: argparse.Namespace) -> int:
     """Reply to an existing email or create a draft reply."""
     body = get_body_content(args)
