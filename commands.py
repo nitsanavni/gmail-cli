@@ -3,10 +3,11 @@
 import argparse
 import base64
 import itertools
+import json
 import mimetypes
 import sys
-from collections.abc import Iterator
-from datetime import datetime
+from collections.abc import Callable, Iterator
+from datetime import datetime, timezone
 from email import encoders
 from email.header import Header
 from email.mime.base import MIMEBase
@@ -14,6 +15,8 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.utils import formataddr, parseaddr
 from pathlib import Path
+
+from googleapiclient.errors import HttpError
 
 from auth import authenticate
 from html_to_markdown import convert_to_markdown
@@ -23,6 +26,18 @@ def format_date(timestamp_ms: str) -> str:
     """Convert Gmail timestamp to readable format."""
     ts = int(timestamp_ms) / 1000
     return datetime.fromtimestamp(ts).strftime('%Y-%m-%d %H:%M')
+
+
+def iso_timestamp(timestamp_ms: str) -> str:
+    """Convert Gmail's internalDate (epoch milliseconds) to an ISO-8601 UTC instant.
+
+    Split seconds from milliseconds instead of dividing by 1000: the float
+    division of e.g. 1753876543123 is not exact, and rounding it back to
+    microseconds can land a millisecond off.
+    """
+    ms = int(timestamp_ms)
+    moment = datetime.fromtimestamp(ms // 1000, tz=timezone.utc)
+    return moment.replace(microsecond=ms % 1000 * 1000).isoformat().replace('+00:00', 'Z')
 
 
 def get_header(headers: list, name: str) -> str:
@@ -277,19 +292,90 @@ def iter_attachment_parts(part: dict) -> Iterator[dict]:
         yield from iter_attachment_parts(subpart)
 
 
-def unique_path(directory: Path, name: str) -> Path:
-    """Return a path in directory that does not overwrite an existing file."""
+def numbered_path(directory: Path, name: str, taken: Callable[[Path], bool]) -> Path:
+    """Return directory/name, suffixed '-1', '-2', ... until `taken` says it is free."""
     candidate = directory / name
-    if not candidate.exists():
+    if not taken(candidate):
         return candidate
 
     stem, suffix = Path(name).stem, Path(name).suffix
     for n in itertools.count(1):
         candidate = directory / f'{stem}-{n}{suffix}'
-        if not candidate.exists():
+        if not taken(candidate):
             return candidate
 
     raise AssertionError('unreachable')  # pragma: no cover
+
+
+def unique_path(directory: Path, name: str) -> Path:
+    """Return a path in directory that does not overwrite an existing file."""
+    return numbered_path(directory, name, lambda path: path.exists())
+
+
+def run_scoped_path() -> Callable[[Path, str], Path]:
+    """Build an allocator that de-dupes only against names it has already handed out.
+
+    `unique_path` asks the filesystem, which is right for downloading into a
+    directory someone else owns but wrong for a directory we rewrite: on a second
+    run the first run's files are sitting there, so every name would slide to
+    '-1', then '-2'. Same message in, same filenames out.
+    """
+    used: set[str] = set()
+
+    def allocate(directory: Path, name: str) -> Path:
+        path = numbered_path(directory, name, lambda candidate: candidate.name in used)
+        used.add(path.name)
+        return path
+
+    return allocate
+
+
+def save_attachments(
+    service,
+    message_id: str,
+    payload: dict,
+    output_dir: Path,
+    allocate: Callable[[Path, str], Path] = unique_path,
+) -> list[dict]:
+    """Download every attachment in payload into output_dir.
+
+    Returns one record per saved file: path, the name as written, mime type and
+    byte size.
+    """
+    saved = []
+
+    for part in iter_attachment_parts(payload):
+        raw_name = part['filename']
+        attachment_id = part['body']['attachmentId']
+
+        name = safe_filename(raw_name)
+        if name is None:
+            print(f'Skipped unsafe attachment name: {raw_name!r}', file=sys.stderr)
+            continue
+        if name != raw_name:
+            print(f'Sanitized attachment name {raw_name!r} -> {name!r}', file=sys.stderr)
+
+        attachment = service.users().messages().attachments().get(
+            userId='me', messageId=message_id, id=attachment_id
+        ).execute()
+
+        data = attachment.get('data')
+        if not data:
+            print(f'No data returned for attachment: {name}', file=sys.stderr)
+            continue
+
+        content = base64.urlsafe_b64decode(data)
+        filepath = allocate(output_dir, name)
+        filepath.write_bytes(content)
+
+        saved.append({
+            'path': filepath,
+            'filename': filepath.name,
+            'mime_type': part.get('mimeType', 'application/octet-stream'),
+            'size': len(content),
+        })
+
+    return saved
 
 
 def cmd_attachments(args: argparse.Namespace) -> int:
@@ -303,33 +389,11 @@ def cmd_attachments(args: argparse.Namespace) -> int:
         userId='me', id=args.id, format='full'
     ).execute()
 
-    found = 0
-    for part in iter_attachment_parts(msg.get('payload', {})):
-        raw_name = part['filename']
-        attachment_id = part['body']['attachmentId']
+    saved = save_attachments(service, args.id, msg.get('payload', {}), output_dir)
+    for record in saved:
+        print(f"Saved: {record['path']}")
 
-        name = safe_filename(raw_name)
-        if name is None:
-            print(f'Skipped unsafe attachment name: {raw_name!r}', file=sys.stderr)
-            continue
-        if name != raw_name:
-            print(f'Sanitized attachment name {raw_name!r} -> {name!r}', file=sys.stderr)
-
-        attachment = service.users().messages().attachments().get(
-            userId='me', messageId=args.id, id=attachment_id
-        ).execute()
-
-        data = attachment.get('data')
-        if not data:
-            print(f'No data returned for attachment: {name}', file=sys.stderr)
-            continue
-
-        filepath = unique_path(output_dir, name)
-        filepath.write_bytes(base64.urlsafe_b64decode(data))
-        print(f'Saved: {filepath}')
-        found += 1
-
-    if not found:
+    if not saved:
         print('No attachments found.')
 
     return 0
