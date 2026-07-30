@@ -40,6 +40,14 @@ uv run gmail_cli.py reply <message-id> --body "Reply text" --bcc "hidden@example
 uv run gmail_cli.py attachments <message-id>              # Into the current directory
 uv run gmail_cli.py attachments <message-id> -o ./out     # Created if missing
 
+# Materialize an email as a directory (envelope.json + attachments/)
+uv run gmail_cli.py materialize <message-id> -o ./events/msg-1
+
+# Labels
+uv run gmail_cli.py labels                                       # List them
+uv run gmail_cli.py label <message-id> --add "factory/seen"      # Created if missing
+uv run gmail_cli.py label <message-id> --add A --add B --remove UNREAD
+
 # Google Drive (read-only)
 uv run gmail_cli.py drive list                    # Recently modified files
 uv run gmail_cli.py drive list --shared           # Only files shared with me
@@ -73,6 +81,23 @@ screenshot pasted into a body is nested two levels down and a top-level-only sca
 reports "No attachments found." Filenames come from the sender and are reduced to a
 bare name before use; same-named attachments get a `-1`, `-2` suffix rather than
 overwriting each other.
+
+`materialize` turns one email into a filesystem event another agent can consume
+without touching the Gmail API: `envelope.json` (`source`, `id`, `thread_id`, `ts`
+as ISO-8601 UTC, `from`/`to`/`cc`, `subject`, `labels`, `body_markdown`, and an
+`attachments` manifest of `filename`/`mime_type`/`size`) next to an `attachments/`
+directory holding the files, inline images included. Re-running overwrites in
+place — the same message always yields the same filenames, because the allocator
+de-dupes against names *this run* handed out rather than against what is on disk
+(`unique_path`, which `attachments` uses, would slide every name to `-1` on a
+second run). An unreadable message id exits 1 before creating anything.
+
+`label` resolves label names through `users.labels.list` and creates any it does
+not find, so `--add "factory/seen"` works on a fresh account. Gmail has no nesting
+API: the slash is literal in the name and the sidebar renders the hierarchy from
+it. System labels are addressable by name too, so `--remove UNREAD` marks read and
+`--remove INBOX` archives. `--remove` of a label the account has never had is
+reported on stderr and skipped, not an error — the end state already holds.
 
 `drive read` accepts a bare file ID or any Drive/Docs URL. Google-native files are
 exported: docs -> markdown, sheets -> CSV, slides -> plain text. Override with `--mime`.

@@ -82,6 +82,42 @@ uv run gmail_cli.py reply abc123def --body "Thanks!" --draft
 uv run gmail_cli.py reply abc123def --body "Thanks!" --bcc "hidden@example.com"
 ```
 
+### Materialize an email into a directory
+
+```bash
+uv run gmail_cli.py materialize abc123def --output ./events/abc123def
+```
+
+Writes the message as a filesystem event another program can read without any
+Gmail credentials:
+
+```
+events/abc123def/
+  envelope.json     # id, thread_id, ts, from/to/cc, subject, labels,
+                    # body_markdown, attachments manifest
+  attachments/      # every attachment and inline image, sanitized names
+```
+
+Re-running against the same directory refreshes it in place — the same message
+always produces the same filenames. An unknown message id exits non-zero.
+
+### Labels
+
+```bash
+# What exists (system labels first, then yours)
+uv run gmail_cli.py labels
+
+# Apply a label, creating it if the account doesn't have it yet
+uv run gmail_cli.py label abc123def --add "factory/seen"
+
+# Several at once, and remove in the same call
+uv run gmail_cli.py label abc123def --add "factory/seen" --add urgent --remove UNREAD
+```
+
+A `/` in a name is what Gmail renders as nesting — `factory/seen` shows up under
+`factory` in the sidebar. System labels work by name, so `--remove UNREAD` marks a
+message read and `--remove INBOX` archives it.
+
 ### Google Drive (read-only)
 
 ```bash
