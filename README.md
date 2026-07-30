@@ -12,7 +12,17 @@ CLI tool for reading, sending, and replying to Gmail emails. Designed for Claude
    ```bash
    uv run gmail_cli.py list --limit 1
    ```
-   This will open a browser for OAuth authorization. Token is saved to `token.json`.
+   This will open a browser for OAuth authorization. The token is saved to
+   `token-<your-email>.json`.
+
+3. **No browser on this machine?** (devcontainer, devbox, ssh)
+   ```bash
+   uv run gmail_cli.py accounts add --headless
+   ```
+   Plain `accounts add` falls back to this automatically when it can't reach a
+   browser. Three steps: open the printed URL in a browser anywhere, grant
+   access, then paste back the full `localhost:1` URL you land on — the
+   "connection refused" page is expected, and its address bar holds the code.
 
 ## Usage
 

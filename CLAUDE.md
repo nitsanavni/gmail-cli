@@ -8,6 +8,7 @@ CLI tool for reading, sending, and replying to Gmail emails. Designed for Claude
 # Account management
 uv run gmail_cli.py accounts              # List configured accounts
 uv run gmail_cli.py accounts add          # Add new account (OAuth flow)
+uv run gmail_cli.py accounts add --headless  # ...from a box with no browser
 uv run gmail_cli.py accounts remove EMAIL # Remove account
 
 # Use specific account (add --account/-a before any command)
@@ -81,6 +82,34 @@ exported: docs -> markdown, sheets -> CSV, slides -> plain text. Override with `
 1. Copy `credentials.json` from gmail_to_md or create new OAuth credentials
 2. First run will prompt for OAuth authorization
 3. Token saved to `token-{email}.json` (e.g., `token-user@example.com.json`)
+
+## Headless authorization (no browser on this machine)
+
+Use on a devcontainer, devbox, or over ssh — anywhere the browser runs somewhere
+else. `accounts add` picks this path automatically when no browser is reachable
+(no `DISPLAY`/`WAYLAND_DISPLAY`, or `webbrowser` finds nothing); `--headless`
+forces it.
+
+```bash
+uv run gmail_cli.py accounts add --headless
+uv run gmail_cli.py --account EMAIL accounts reauth --headless
+```
+
+Three steps:
+
+1. The command prints an authorization URL — open it in a browser on any machine.
+2. Grant access. The browser then fails to load a `localhost:1` page
+   ("connection refused"). That failure *is* the success signal — the code is in
+   the address bar.
+3. Paste that full URL back at the prompt. A bare code works too.
+
+The redirect URI is `http://localhost:1/` — a port nothing can be listening on.
+Desktop-app OAuth clients accept any loopback port without pre-registration, so
+no Cloud Console change is needed; a *Web application* client would have to list
+this URI explicitly.
+
+Re-consent after a scope change goes through the same path, since
+`run_oauth_flow` auto-detects rather than being told at the call site.
 
 ## Multi-Account
 
