@@ -2,13 +2,17 @@
 
 import json
 import os
+import re
 import sys
+import webbrowser
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
+from urllib.parse import parse_qs, unquote, urlparse
 
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow
+from google_auth_oauthlib.flow import Flow, InstalledAppFlow
 from googleapiclient.discovery import build
 
 SCOPES = [
@@ -26,6 +30,15 @@ BASE_DIR = Path(__file__).parent
 CREDENTIALS_PATH = BASE_DIR / 'credentials.json'
 TOKEN_PREFIX = 'token-'
 TOKEN_SUFFIX = '.json'
+
+# Port 1 is privileged and never listening, so the browser fails fast with
+# "connection refused" while still putting the code in the address bar.
+HEADLESS_REDIRECT_URI = 'http://localhost:1/'
+
+# Google auth codes are URL-safe base64 plus '/', and run ~70+ characters. The
+# length floor is what tells a pasted code apart from a typed "yes" or "nope",
+# which are otherwise indistinguishable from one.
+BARE_CODE_RE = re.compile(r'[A-Za-z0-9._~%/-]{20,}')
 
 
 def get_token_path(email: str) -> Path:
@@ -149,21 +162,109 @@ def refresh_credentials(email: str, creds: Credentials) -> Credentials | None:
     return creds
 
 
-def run_oauth_flow() -> tuple[Credentials, str]:
-    """Run interactive OAuth flow to obtain new credentials.
-
-    Returns tuple of (credentials, email_address).
-    """
+def require_credentials_file() -> None:
+    """Fail early and legibly when the OAuth client secrets are absent."""
     if not CREDENTIALS_PATH.exists():
         raise FileNotFoundError(
             f"credentials.json not found at {CREDENTIALS_PATH}. "
             "Copy from gmail_to_md or create new OAuth credentials."
         )
 
-    flow = InstalledAppFlow.from_client_secrets_file(str(CREDENTIALS_PATH), SCOPES)
-    creds = flow.run_local_server(port=0)
 
-    # Fetch email to name the token file
+def browser_available() -> bool:
+    """Whether a browser on this machine could serve the loopback redirect.
+
+    The browser flow only works if the browser runs here — it has to reach the
+    local server we spin up. A remote browser (devcontainer, ssh box) cannot.
+    """
+    if sys.platform in ('darwin', 'win32'):
+        return True
+    if not (os.environ.get('DISPLAY') or os.environ.get('WAYLAND_DISPLAY')):
+        return False
+    try:
+        webbrowser.get()
+    except webbrowser.Error:
+        return False
+    return True
+
+
+def parse_redirect_response(pasted: str) -> tuple[str | None, str | None]:
+    """Extract (code, state) from a pasted redirect URL or a bare code.
+
+    Accepts the full address-bar URL, a bare query string, or just the code.
+    """
+    text = pasted.strip().strip('\'"')
+    if not text:
+        return None, None
+
+    if '=' in text:
+        # urlparse only fills .query when a '?' is present; a pasted bare query
+        # string lands in .path instead.
+        query = urlparse(text).query or text.lstrip('?')
+        params = parse_qs(query)
+        code = params.get('code', [None])[0]
+        state = params.get('state', [None])[0]
+        if code:
+            return code, state
+        if error := params.get('error', [None])[0]:
+            print(f'Google reported an authorization error: {error}', file=sys.stderr)
+        return None, state
+
+    if BARE_CODE_RE.fullmatch(text):
+        return unquote(text), None
+    return None, None
+
+
+def build_headless_flow() -> Flow:
+    """Build an OAuth flow whose redirect the local browser cannot intercept."""
+    return Flow.from_client_secrets_file(
+        str(CREDENTIALS_PATH), SCOPES, redirect_uri=HEADLESS_REDIRECT_URI
+    )
+
+
+def print_headless_instructions(auth_url: str) -> None:
+    """Explain the copy-paste dance, including the failure that means success."""
+    print('\nNo browser here — authorize from any other machine:\n')
+    print('1. Open this URL in a browser:\n')
+    print(f'   {auth_url}\n')
+    print('2. Grant access. The browser then tries to load a "localhost:1" page')
+    print('   and fails with "connection refused" — that is expected.\n')
+    print('3. Copy the FULL URL from the address bar of that failed page')
+    print('   and paste it below.\n')
+
+
+def prompt_for_code(
+    expected_state: str | None,
+    input_fn: Callable[[str], str] = input,
+) -> str:
+    """Read the pasted redirect URL (or bare code) and return the auth code.
+
+    Re-prompts once when nothing code-shaped is pasted, then gives up.
+    """
+    prompt = 'Paste the redirect URL (or just the code): '
+    for attempt in range(2):
+        code, state = parse_redirect_response(input_fn(prompt))
+        if code:
+            if expected_state and state and state != expected_state:
+                print(
+                    'Warning: state mismatch — this response may belong to a '
+                    'different authorization attempt.',
+                    file=sys.stderr,
+                )
+            return code
+        if attempt == 0:
+            print('No authorization code found in that text.', file=sys.stderr)
+            prompt = 'Try again — paste the whole URL from the address bar: '
+
+    print(
+        'Error: no authorization code provided. Re-run the command to start over.',
+        file=sys.stderr,
+    )
+    sys.exit(1)
+
+
+def finish_authorization(creds: Credentials) -> tuple[Credentials, str]:
+    """Name the token file after the account that actually authorized."""
     service = build('gmail', 'v1', credentials=creds)
     email = get_email_from_service(service)
 
@@ -171,6 +272,54 @@ def run_oauth_flow() -> tuple[Credentials, str]:
     print(f'Authenticated as: {email}')
 
     return creds, email
+
+
+def run_headless_oauth_flow(
+    input_fn: Callable[[str], str] = input,
+) -> tuple[Credentials, str]:
+    """Authorize by pasting the redirect URL back from a browser elsewhere."""
+    require_credentials_file()
+
+    flow = build_headless_flow()
+    # offline + consent so a refresh token comes back even on re-authorization.
+    auth_url, state = flow.authorization_url(access_type='offline', prompt='consent')
+
+    print_headless_instructions(auth_url)
+    code = prompt_for_code(state, input_fn)
+
+    try:
+        flow.fetch_token(code=code)
+    except Exception as exc:
+        print(f'Error: token exchange failed: {exc}', file=sys.stderr)
+        sys.exit(1)
+
+    return finish_authorization(flow.credentials)
+
+
+def run_browser_oauth_flow() -> tuple[Credentials, str]:
+    """Authorize via a browser on this machine, catching the loopback redirect."""
+    require_credentials_file()
+
+    print('Opening browser for authentication...')
+    flow = InstalledAppFlow.from_client_secrets_file(str(CREDENTIALS_PATH), SCOPES)
+    creds = flow.run_local_server(port=0)
+
+    return finish_authorization(creds)
+
+
+def run_oauth_flow(headless: bool | None = None) -> tuple[Credentials, str]:
+    """Run interactive OAuth flow to obtain new credentials.
+
+    headless=None auto-selects: the browser flow where a usable browser exists,
+    the paste-the-URL flow otherwise.
+
+    Returns tuple of (credentials, email_address).
+    """
+    if headless is None:
+        headless = not browser_available()
+    if headless:
+        return run_headless_oauth_flow()
+    return run_browser_oauth_flow()
 
 
 def get_credentials(account: str | None = None) -> Any:
