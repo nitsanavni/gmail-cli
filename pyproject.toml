@@ -13,5 +13,11 @@ dependencies = [
 [project.scripts]
 gmail-cli = "gmail_cli:main"
 
+[tool.pytest.ini_options]
+# Modules live at the repo root, so tests under tests/ need it importable.
+pythonpath = ["."]
+
 [dependency-groups]
-dev = []
+dev = [
+    "pytest>=8.0.0",
+]
