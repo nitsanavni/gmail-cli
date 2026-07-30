@@ -69,6 +69,8 @@ def main() -> int:
     list_parser.add_argument('--query', '-q', help='Gmail search query')
     list_parser.add_argument('--limit', '-n', type=int, default=10,
                             help='Max messages to return (default: 10)')
+    list_parser.add_argument('--ids-only', action='store_true',
+                            help='Print one message ID per line and nothing else')
     list_parser.set_defaults(func=cmd_list)
 
     # read command

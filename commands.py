@@ -153,6 +153,17 @@ def cmd_list(args: argparse.Namespace) -> int:
     ).execute()
 
     messages = results.get('messages', [])
+
+    # Machine-readable mode for poll loops: one id per line, nothing else, and
+    # no output at all when the query matches nothing — so a shell `for` over
+    # the output iterates zero times instead of once over a prose line. It also
+    # skips the per-message metadata fetch below, which is N extra round-trips
+    # a caller that only wants ids never needed.
+    if getattr(args, 'ids_only', False):
+        for msg in messages:
+            print(msg['id'])
+        return 0
+
     if not messages:
         print('No messages found.')
         return 0

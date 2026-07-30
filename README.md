@@ -35,7 +35,14 @@ uv run gmail_cli.py list --limit 10
 # Search with Gmail query
 uv run gmail_cli.py list --query "from:alice@example.com" --limit 5
 uv run gmail_cli.py list --query "is:unread subject:urgent"
+
+# Just the IDs, one per line — for scripts and poll loops
+uv run gmail_cli.py list --query "has:attachment -label:factory/seen" --ids-only
 ```
+
+`--ids-only` prints nothing at all when the query matches nothing, so a shell
+`for` over its output iterates zero times instead of once over a prose line. It
+also skips the per-message metadata fetch, so N ids cost one round-trip.
 
 ### Read emails
 

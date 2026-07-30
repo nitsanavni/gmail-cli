@@ -17,6 +17,7 @@ uv run gmail_cli.py -a work@company.com send --to ...
 
 # List emails
 uv run gmail_cli.py list --query "from:user@example.com" --limit 10
+uv run gmail_cli.py list --query "..." --ids-only   # one ID per line, for scripts
 
 # Read emails (by ID or query)
 uv run gmail_cli.py read <message-id> [<message-id> ...]
@@ -81,6 +82,12 @@ screenshot pasted into a body is nested two levels down and a top-level-only sca
 reports "No attachments found." Filenames come from the sender and are reduced to a
 bare name before use; same-named attachments get a `-1`, `-2` suffix rather than
 overwriting each other.
+
+`list --ids-only` is the machine-readable mode: one id per line, no header, and
+**no output when nothing matches** — so `for id in $(... --ids-only)` iterates
+zero times rather than once over "No messages found." It returns before the
+per-message metadata loop, so N ids cost one API round-trip instead of N + 1.
+This is the shape a poll loop consumes (the `email-scout` sensor in test-mvp).
 
 `materialize` turns one email into a filesystem event another agent can consume
 without touching the Gmail API: `envelope.json` (`source`, `id`, `thread_id`, `ts`
