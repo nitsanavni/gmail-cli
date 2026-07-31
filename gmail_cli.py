@@ -11,7 +11,13 @@ from account_commands import (
     cmd_accounts_reauth,
     cmd_accounts_remove,
 )
-from calendar_commands import cmd_cal_add, cmd_cal_calendars, cmd_cal_delete, cmd_cal_list
+from calendar_commands import (
+    cmd_cal_add,
+    cmd_cal_calendars,
+    cmd_cal_delete,
+    cmd_cal_invite,
+    cmd_cal_list,
+)
 from commands import (
     cmd_archive,
     cmd_attachments,
@@ -150,9 +156,20 @@ def main() -> int:
     cal_add_parser.add_argument('--location', help='Event location')
     cal_add_parser.add_argument('--reminder', type=int,
                                 help='Popup reminder N minutes before')
+    cal_add_parser.add_argument('--attendee', action='append',
+                                help='Attendee email (repeatable; sends invites)')
     cal_add_parser.add_argument('--calendar', '-c', default='primary',
                                 help='Calendar ID (default: primary)')
     cal_add_parser.set_defaults(func=cmd_cal_add)
+
+    cal_invite_parser = cal_subparsers.add_parser(
+        'invite', help='Add attendees to an existing event (sends invites)')
+    cal_invite_parser.add_argument('event_id', help='Event ID')
+    cal_invite_parser.add_argument('--attendee', action='append', required=True,
+                                   help='Attendee email (repeatable)')
+    cal_invite_parser.add_argument('--calendar', '-c', default='primary',
+                                   help='Calendar ID (default: primary)')
+    cal_invite_parser.set_defaults(func=cmd_cal_invite)
 
     cal_delete_parser = cal_subparsers.add_parser('delete', help='Delete an event')
     cal_delete_parser.add_argument('event_id', help='Event ID')

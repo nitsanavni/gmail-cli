@@ -84,9 +84,36 @@ def cmd_cal_add(args: argparse.Namespace) -> int:
             'overrides': [{'method': 'popup', 'minutes': args.reminder}],
         }
 
-    event = service.events().insert(calendarId=args.calendar, body=body).execute()
+    if args.attendee:
+        body['attendees'] = [{'email': email} for email in args.attendee]
+
+    event = service.events().insert(
+        calendarId=args.calendar, body=body,
+        sendUpdates='all' if args.attendee else 'none',
+    ).execute()
     print(f"Created: {format_event(event)}")
     print(event.get('htmlLink', ''))
+    return 0
+
+
+def cmd_cal_invite(args: argparse.Namespace) -> int:
+    """Add attendees to an existing event (sends invite emails)."""
+    service = authenticate_calendar(args.account)
+    event = service.events().get(calendarId=args.calendar, eventId=args.event_id).execute()
+
+    attendees = event.get('attendees', [])
+    existing = {a['email'].lower() for a in attendees}
+    added = [e for e in args.attendee if e.lower() not in existing]
+    if not added:
+        print('All given attendees are already invited.')
+        return 0
+    attendees.extend({'email': email} for email in added)
+
+    event = service.events().patch(
+        calendarId=args.calendar, eventId=args.event_id,
+        body={'attendees': attendees}, sendUpdates='all',
+    ).execute()
+    print(f"Invited {', '.join(added)} to: {format_event(event)}")
     return 0
 
 
