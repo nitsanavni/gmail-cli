@@ -21,6 +21,9 @@ from calendar_commands import (
 from commands import (
     cmd_archive,
     cmd_attachments,
+    cmd_drafts_delete,
+    cmd_drafts_list,
+    cmd_drafts_send,
     cmd_label,
     cmd_labels,
     cmd_list,
@@ -99,6 +102,27 @@ def main() -> int:
     reply_parser.add_argument('message_id', help='Message ID to reply to')
     add_compose_args(reply_parser)
     reply_parser.set_defaults(func=cmd_reply)
+
+    # drafts command
+    drafts_parser = subparsers.add_parser('drafts', help='Manage drafts')
+    drafts_subparsers = drafts_parser.add_subparsers(dest='drafts_action', required=True)
+
+    drafts_list_parser = drafts_subparsers.add_parser('list', help='List drafts')
+    drafts_list_parser.add_argument('--query', '-q', help='Gmail search query')
+    drafts_list_parser.add_argument('--limit', '-n', type=int, default=10,
+                                    help='Max drafts to return (default: 10)')
+    drafts_list_parser.set_defaults(func=cmd_drafts_list)
+
+    drafts_send_parser = drafts_subparsers.add_parser('send', help='Send an existing draft')
+    drafts_send_parser.add_argument('draft_id', help='Draft ID')
+    drafts_send_parser.set_defaults(func=cmd_drafts_send)
+
+    drafts_delete_parser = drafts_subparsers.add_parser(
+        'delete', help='Delete a draft (discard without sending)')
+    drafts_delete_parser.add_argument('draft_id', help='Draft ID')
+    drafts_delete_parser.add_argument('--yes', '-y', action='store_true',
+                                      help='Skip confirmation prompt')
+    drafts_delete_parser.set_defaults(func=cmd_drafts_delete)
 
     # attachments command
     attach_parser = subparsers.add_parser('attachments', help='Download attachments')

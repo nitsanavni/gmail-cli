@@ -624,3 +624,65 @@ def cmd_reply(args: argparse.Namespace) -> int:
         print(f"Thread-ID: {result['threadId']}")
 
     return 0
+
+
+def cmd_drafts_list(args: argparse.Namespace) -> int:
+    """List drafts."""
+    service = authenticate(args.account)
+
+    result = service.users().drafts().list(
+        userId='me', q=args.query or '', maxResults=args.limit
+    ).execute()
+    drafts = result.get('drafts', [])
+    if not drafts:
+        print('No drafts found.')
+        return 0
+
+    print(f'Found {len(drafts)} draft(s):\n')
+    for i, draft in enumerate(drafts, 1):
+        msg = service.users().messages().get(
+            userId='me',
+            id=draft['message']['id'],
+            format='metadata',
+            metadataHeaders=['To', 'Subject'],
+        ).execute()
+        headers = msg.get('payload', {}).get('headers', [])
+        print(f"[{i}] Draft-ID: {draft['id']}")
+        print(f"    To: {get_header(headers, 'To')}")
+        print(f"    Subject: {get_header(headers, 'Subject')}")
+        print(f"    Date: {format_date(msg.get('internalDate', '0'))}")
+        print()
+    return 0
+
+
+def get_draft_subject(service, draft_id: str) -> str:
+    draft = service.users().drafts().get(
+        userId='me', id=draft_id, format='metadata'
+    ).execute()
+    headers = draft['message'].get('payload', {}).get('headers', [])
+    return get_header(headers, 'Subject')
+
+
+def cmd_drafts_send(args: argparse.Namespace) -> int:
+    """Send an existing draft."""
+    service = authenticate(args.account)
+    result = service.users().drafts().send(
+        userId='me', body={'id': args.draft_id}
+    ).execute()
+    print('Draft sent successfully.')
+    print(f"Message-ID: {result['id']}")
+    return 0
+
+
+def cmd_drafts_delete(args: argparse.Namespace) -> int:
+    """Delete a draft (discards it, does not send)."""
+    service = authenticate(args.account)
+    subject = get_draft_subject(service, args.draft_id)
+    if not args.yes:
+        answer = input(f"Delete draft '{subject or '(no subject)'}'? [y/N] ")
+        if answer.strip().lower() != 'y':
+            print('Aborted.')
+            return 1
+    service.users().drafts().delete(userId='me', id=args.draft_id).execute()
+    print(f"Deleted draft: {subject or '(no subject)'}")
+    return 0
