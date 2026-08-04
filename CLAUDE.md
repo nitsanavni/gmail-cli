@@ -2,6 +2,10 @@
 
 CLI tool for reading, sending, and replying to Gmail emails. Designed for Claude Code integration.
 
+**If the tool is missing a capability, extend the tool** — add a flag/command here (plus a test) instead of writing ad-hoc Python against the Gmail API.
+
+**Reply addressing gotcha**: `reply` defaults To: to the original message's *sender*. Replying to your own sent message therefore addresses yourself — pass an explicit `--to` in that case.
+
 ## Commands
 
 ```bash

@@ -100,6 +100,9 @@ def main() -> int:
     # reply command
     reply_parser = subparsers.add_parser('reply', help='Reply to an email')
     reply_parser.add_argument('message_id', help='Message ID to reply to')
+    reply_parser.add_argument('--to', action='append',
+                              help='Override To recipient (repeatable); '
+                                   'default is the original sender')
     add_compose_args(reply_parser)
     reply_parser.set_defaults(func=cmd_reply)
 

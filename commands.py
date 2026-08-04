@@ -598,7 +598,7 @@ def cmd_reply(args: argparse.Namespace) -> int:
     reply_to = formataddr((str(Header(name, 'utf-8')), addr)) if name else addr
 
     message = build_message(body, args.attach)
-    message['To'] = reply_to
+    message['To'] = ', '.join(args.to) if getattr(args, 'to', None) else reply_to
     message['Subject'] = subject
     message['In-Reply-To'] = original_message_id
     message['References'] = original_message_id
