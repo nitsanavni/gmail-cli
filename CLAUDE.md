@@ -23,6 +23,9 @@ uv run gmail_cli.py -a work@company.com send --to ...
 uv run gmail_cli.py list --query "from:user@example.com" --limit 10
 uv run gmail_cli.py list --query "..." --ids-only   # one ID per line, for scripts
 
+# See a thread's shape (accepts a thread ID or any message ID in it)
+uv run gmail_cli.py thread <thread-id>
+
 # Read emails (by ID or query)
 uv run gmail_cli.py read <message-id> [<message-id> ...]
 uv run gmail_cli.py read --query "is:unread" --limit 5
@@ -87,10 +90,28 @@ reports "No attachments found." Filenames come from the sender and are reduced t
 bare name before use; same-named attachments get a `-1`, `-2` suffix rather than
 overwriting each other.
 
+The three read commands are one ladder — `list` (leads) → `thread` (structure) →
+`read` (content) — and each level names the next with real ids rather than
+leaving the caller to guess a command exists. `list` prints each row's thread
+size and its position in it (`6 msgs · 2 newer in thread`) plus the snippet;
+`thread` prints one line per message with `📎 N` and `unread` badges and snippets
+instead of bodies; `read` prints the body, its position in the thread, and the
+attachment manifest. Every level omits its extra lines when there is nothing to
+disclose — a thread of one, a message with no attachments — so the common clean
+case reads exactly as it did before.
+
+The context is not paid for twice. `list` fetches each *distinct thread* once
+via `threads.get(format='metadata')`, which returns every sibling's headers, and
+that response feeds the row headers too — so it replaces the old per-message
+`messages.get`, not adds to it. `read`'s attachment block is free: the payload is
+already `format='full'`, and sizes come from `body.size`. Its filenames run
+through the same allocator `materialize` uses, so the listing is a prediction of
+the directory rather than a second, differently-spelled truth.
+
 `list --ids-only` is the machine-readable mode: one id per line, no header, and
 **no output when nothing matches** — so `for id in $(... --ids-only)` iterates
 zero times rather than once over "No messages found." It returns before the
-per-message metadata loop, so N ids cost one API round-trip instead of N + 1.
+thread-context loop, so N ids cost one API round-trip instead of N + 1.
 This is the shape a poll loop consumes (the `email-scout` sensor in test-mvp).
 
 `materialize` turns one email into a filesystem event another agent can consume
