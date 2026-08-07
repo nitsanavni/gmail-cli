@@ -367,13 +367,18 @@ def resolve_thread(service, ident: str) -> dict | None:
     Every other command prints message ids, so a message id is what a caller
     actually holds. Trying threads.get first keeps the common case at one call
     and only pays for the lookup when the id turns out to be a message's.
+
+    Only a 404 means 'not a thread id'. A 403 or a 429 says nothing about what
+    the id is, and swallowing one here would report a rate limit to the caller
+    as an id that does not exist — so anything else propagates.
     """
     threads = service.users().threads()
 
     try:
         return threads.get(userId='me', id=ident, format='full').execute()
-    except HttpError:
-        pass
+    except HttpError as exc:
+        if exc.resp.status != 404:
+            raise
 
     try:
         msg = service.users().messages().get(
@@ -381,6 +386,8 @@ def resolve_thread(service, ident: str) -> dict | None:
         ).execute()
         return threads.get(userId='me', id=msg['threadId'], format='full').execute()
     except HttpError as exc:
+        if exc.resp.status != 404:
+            raise
         print(f'Error: no thread or message with id {ident}: {exc}', file=sys.stderr)
         return None
 
@@ -403,7 +410,15 @@ def cmd_thread(args: argparse.Namespace) -> int:
     """Show the shape of a thread: one line per message, snippets not bodies."""
     service = authenticate(args.account)
 
-    thread = resolve_thread(service, args.id)
+    # A 404 already printed its own "no thread or message" line. Anything else
+    # reaching here is a real API failure, and every other command in this file
+    # reports one rather than handing the caller a traceback.
+    try:
+        thread = resolve_thread(service, args.id)
+    except HttpError as exc:
+        print(f'Error: cannot read thread {args.id}: {exc}', file=sys.stderr)
+        return 1
+
     if thread is None:
         return 1
 

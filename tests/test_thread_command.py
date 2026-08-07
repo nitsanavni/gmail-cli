@@ -39,6 +39,11 @@ def not_found():
     return HttpError(MagicMock(status=404, reason='Not Found'), b'{"error": "notFound"}')
 
 
+def rate_limited():
+    return HttpError(MagicMock(status=429, reason='Too Many Requests'),
+                     b'{"error": "Rate Limit Exceeded"}')
+
+
 def fake_service(threads, message_lookup=None):
     """threads: {thread_id: [message, ...]}. message_lookup: {msg_id: {'threadId': ...}}."""
     service = MagicMock()
@@ -117,6 +122,19 @@ def test_attachment_and_unread_badges(monkeypatch, capsys):
     assert 'unread' not in lines[2]
 
 
+def test_snippets_are_unescaped_and_truncated(monkeypatch, capsys):
+    """One line per message is the whole point — a full snippet wraps and ruins it."""
+    service = fake_service({'t1': [
+        message('m1', snippet='It doesn&#39;t fit &amp; ' + 'x' * 200)]})
+
+    run(monkeypatch, service)
+
+    quoted = capsys.readouterr().out.splitlines()[2].strip()
+    assert quoted.startswith('"It doesn\'t fit & xxx')
+    assert quoted.endswith('…"')
+    assert len(quoted.strip('"')) == 101  # 100 characters plus the ellipsis
+
+
 def test_orders_messages_by_time(monkeypatch, capsys):
     service = fake_service({'t1': [
         message('m2', date_ms=1_700_000_100_000),
@@ -140,6 +158,8 @@ def test_accepts_a_message_id(monkeypatch, capsys):
     assert run(monkeypatch, service, ident='m9') == 0
 
     assert capsys.readouterr().out.startswith('Thread: t1 · ')
+    # A 404 on threads.get is what licenses the message lookup.
+    service.users.return_value.messages.return_value.get.assert_called_once()
 
 
 def test_unknown_id_exits_nonzero(monkeypatch, capsys):
@@ -147,3 +167,34 @@ def test_unknown_id_exits_nonzero(monkeypatch, capsys):
 
     assert run(monkeypatch, service, ident='nope') == 1
     assert 'no thread or message with id nope' in capsys.readouterr().err
+
+
+def test_a_rate_limit_is_not_reported_as_a_missing_id(monkeypatch, capsys):
+    """429 says nothing about whether the id exists — do not claim it doesn't.
+
+    Treating every error as 'must be a message id then' ends with an agent told
+    'no thread or message with id X' when it was simply throttled.
+    """
+    service = fake_service({})
+    service.users.return_value.threads.return_value.get.side_effect = rate_limited()
+
+    assert run(monkeypatch, service, ident='t1') == 1
+
+    err = capsys.readouterr().err
+    assert 'no thread or message' not in err
+    assert 'cannot read thread t1' in err
+    assert '429' in err and 'Too Many Requests' in err
+    # The message lookup answers a question a 429 never asked.
+    service.users.return_value.messages.return_value.get.assert_not_called()
+
+
+def test_a_rate_limit_on_the_message_lookup_is_not_a_missing_id(monkeypatch, capsys):
+    """Same gate on the fallback leg: a throttled lookup is not an absent id."""
+    service = fake_service({})
+    service.users.return_value.messages.return_value.get.side_effect = rate_limited()
+
+    assert run(monkeypatch, service, ident='m9') == 1
+
+    err = capsys.readouterr().err
+    assert 'no thread or message' not in err
+    assert 'cannot read thread m9' in err

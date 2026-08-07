@@ -87,6 +87,34 @@ def test_position_comes_from_time_not_api_order(monkeypatch, capsys):
     assert '1 newer in thread' in capsys.readouterr().out
 
 
+def test_snippet_shows_on_a_row_inside_a_conversation(monkeypatch, capsys):
+    """The snippet is not the single-message consolation prize — and it is the
+    row's own, not whatever the thread said most recently."""
+    thread = [
+        message('m1', 't1', date_ms=1, snippet='What the row itself says.'),
+        message('m2', 't1', date_ms=2, snippet='What someone said after it.'),
+    ]
+    service = fake_service([('m1', 't1')], {'t1': thread})
+
+    run(monkeypatch, service)
+
+    out = capsys.readouterr().out
+    assert '"What the row itself says."' in out
+    assert 'What someone said after it.' not in out
+
+
+def test_thread_context_is_a_metadata_fetch(monkeypatch):
+    """The budget claim: headers only. format='full' would drag every body
+    of every thread across the wire to print four lines per row."""
+    service = fake_service([('m1', 't1')], {'t1': [message('m1', 't1')]})
+
+    run(monkeypatch, service)
+
+    kwargs = service.users.return_value.threads.return_value.get.call_args.kwargs
+    assert kwargs['format'] == 'metadata'
+    assert kwargs['metadataHeaders'] == ['From', 'Subject', 'Date']
+
+
 def test_single_message_thread_stays_quiet(monkeypatch, capsys):
     """Most of an inbox is threads of one; a Thread line on each buries the rest."""
     service = fake_service(

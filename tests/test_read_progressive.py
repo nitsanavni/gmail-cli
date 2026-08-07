@@ -103,6 +103,17 @@ def test_one_thread_fetch_per_distinct_thread(monkeypatch):
     assert service.users.return_value.threads.return_value.get.call_count == 1
 
 
+def test_the_position_lookup_is_a_metadata_fetch(monkeypatch):
+    """One line of output must not cost every body in the thread."""
+    service = fake_service({'m1': message('m1')}, {'t1': [sibling('m1', 1)]})
+
+    run(monkeypatch, service, ['m1'])
+
+    kwargs = service.users.return_value.threads.return_value.get.call_args.kwargs
+    assert kwargs['format'] == 'metadata'
+    assert kwargs['metadataHeaders'] == ['From', 'Subject', 'Date']
+
+
 def test_attachments_are_named_after_the_body(monkeypatch, capsys):
     payload = part(mime='multipart/mixed', parts=[
         part(mime='text/plain', body_text='See attached.'),
