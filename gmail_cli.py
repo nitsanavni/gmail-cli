@@ -31,6 +31,7 @@ from commands import (
     cmd_read,
     cmd_reply,
     cmd_send,
+    cmd_thread,
 )
 from docs_commands import cmd_docs_append, cmd_docs_create, cmd_docs_watch
 from guide_commands import cmd_guide, guide_hint
@@ -89,6 +90,12 @@ def main() -> int:
     read_parser.add_argument('--limit', '-n', type=int, default=10,
                             help='Max messages when using query (default: 10)')
     read_parser.set_defaults(func=cmd_read)
+
+    # thread command
+    thread_parser = subparsers.add_parser(
+        'thread', help='Summarize a thread: one line per message, no bodies')
+    thread_parser.add_argument('id', help='Thread ID, or the ID of a message in it')
+    thread_parser.set_defaults(func=cmd_thread)
 
     # send command
     send_parser = subparsers.add_parser('send', help='Send an email')

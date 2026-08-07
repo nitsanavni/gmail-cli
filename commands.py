@@ -2,6 +2,7 @@
 
 import argparse
 import base64
+import html
 import itertools
 import json
 import mimetypes
@@ -142,6 +143,78 @@ def encode_message(message: MIMEText) -> str:
     return base64.urlsafe_b64encode(message.as_bytes()).decode('utf-8')
 
 
+def clean_snippet(snippet: str, limit: int = 80) -> str:
+    """Turn the API's snippet into one short quotable line.
+
+    Gmail returns snippets HTML-escaped — `don&#39;t`, `&quot;`, `&amp;` — which
+    is noise in a terminal, and long enough to wrap and swamp the row it belongs
+    to. Unescape, collapse the whitespace, and cut to `limit`.
+    """
+    text = ' '.join(html.unescape(snippet or '').split())
+    if len(text) > limit:
+        text = text[:limit].rstrip() + '…'
+    return text
+
+
+def in_time_order(messages: list[dict]) -> list[dict]:
+    """Sort messages oldest-first by internalDate.
+
+    Gmail returns a thread's messages in order already, but the position we
+    report ('2 newer in thread') is a claim about time, so derive it from time.
+    """
+    return sorted(messages, key=lambda msg: int(msg.get('internalDate', 0)))
+
+
+def thread_siblings(service, thread_id: str) -> list[dict]:
+    """Every message in a thread, metadata only, oldest first.
+
+    One threads.get returns all siblings' headers, so this *replaces* the
+    per-message metadata fetch a caller would otherwise do rather than adding to
+    it. A thread we cannot read costs the caller its context, not its output.
+    """
+    try:
+        thread = service.users().threads().get(
+            userId='me',
+            id=thread_id,
+            format='metadata',
+            metadataHeaders=['From', 'Subject', 'Date'],
+        ).execute()
+    except HttpError as exc:
+        print(f'Could not read thread {thread_id}: {exc}', file=sys.stderr)
+        return []
+
+    return in_time_order(thread.get('messages', []))
+
+
+def find_message(messages: list[dict], msg_id: str) -> dict | None:
+    """Return the message with this id, or None."""
+    for msg in messages:
+        if msg.get('id') == msg_id:
+            return msg
+    return None
+
+
+def newer_in_thread(siblings: list[dict], msg_id: str) -> int:
+    """How many messages arrived after this one in its thread."""
+    ids = [msg['id'] for msg in siblings]
+    return len(ids) - 1 - ids.index(msg_id)
+
+
+def thread_position(siblings: list[dict], msg_id: str) -> str:
+    """' (message 5 of 6 · 1 newer)' — or '' when there is nothing to disclose.
+
+    Empty for a thread of one and for a thread we could not read, so a lone
+    message reads exactly as it did before this existed.
+    """
+    if len(siblings) < 2 or find_message(siblings, msg_id) is None:
+        return ''
+
+    newer = newer_in_thread(siblings, msg_id)
+    standing = 'latest' if newer == 0 else f'{newer} newer'
+    index = len(siblings) - newer
+    return f' (message {index} of {len(siblings)} · {standing})'
+
+
 def cmd_list(args: argparse.Namespace) -> int:
     """List emails matching query."""
     service = authenticate(args.account)
@@ -170,19 +243,49 @@ def cmd_list(args: argparse.Namespace) -> int:
 
     print(f'Found {len(messages)} message(s):\n')
 
+    # One threads.get per distinct thread, not one messages.get per row: the
+    # thread response already carries every sibling's headers, so the row costs
+    # no more than it did and arrives knowing what else is in its conversation.
+    threads = {
+        thread_id: thread_siblings(service, thread_id)
+        for thread_id in dict.fromkeys(m.get('threadId') for m in messages)
+        if thread_id
+    }
+
     for i, msg in enumerate(messages, 1):
-        msg_data = service.users().messages().get(
-            userId='me',
-            id=msg['id'],
-            format='metadata',
-            metadataHeaders=['From', 'Subject', 'Date']
-        ).execute()
+        siblings = threads.get(msg.get('threadId'), [])
+        msg_data = find_message(siblings, msg['id'])
+        if msg_data is None:
+            # The thread read failed, or the message left it between the two
+            # calls. Fall back to the single-message fetch and drop the context.
+            siblings = []
+            msg_data = service.users().messages().get(
+                userId='me',
+                id=msg['id'],
+                format='metadata',
+                metadataHeaders=['From', 'Subject', 'Date']
+            ).execute()
 
         headers = msg_data.get('payload', {}).get('headers', [])
         print(f"[{i}] ID: {msg['id']}")
         print(f"    From: {get_header(headers, 'From')}")
         print(f"    Subject: {get_header(headers, 'Subject')}")
         print(f"    Date: {format_date(msg_data.get('internalDate', '0'))}")
+
+        # A thread of one has no context to disclose, and saying so on every row
+        # of an inbox that is mostly singletons buries the rows that do.
+        in_conversation = len(siblings) > 1
+        if in_conversation:
+            newer = newer_in_thread(siblings, msg['id'])
+            standing = 'this is the latest' if newer == 0 else f'{newer} newer in thread'
+            print(f"    Thread: {msg['threadId']} · {len(siblings)} msgs · {standing}")
+
+        if snippet := clean_snippet(msg_data.get('snippet', '')):
+            print(f'    "{snippet}"')
+
+        if in_conversation:
+            print(f"    → gmail thread {msg['threadId']}")
+
         print()
 
     return 0
@@ -207,6 +310,10 @@ def cmd_read(args: argparse.Namespace) -> int:
         print('No messages found.')
         return 0
 
+    # Reading several messages of one thread is the common case (`read --query`
+    # on a conversation), and they all need the same sibling list.
+    threads: dict[str, list[dict]] = {}
+
     for i, msg_id in enumerate(message_ids):
         if i > 0:
             print('\n' + '=' * 60 + '\n')
@@ -217,9 +324,16 @@ def cmd_read(args: argparse.Namespace) -> int:
             format='full'
         ).execute()
 
+        thread_id = msg['threadId']
+        if thread_id not in threads:
+            threads[thread_id] = thread_siblings(service, thread_id)
+        position = thread_position(threads[thread_id], msg['id'])
+
         headers = msg.get('payload', {}).get('headers', [])
         print(f"Message-ID: {msg['id']}")
-        print(f"Thread-ID: {msg['threadId']}")
+        print(f"Thread-ID: {thread_id}{position}")
+        if position:
+            print(f'→ gmail thread {thread_id}')
         print(f"From: {get_header(headers, 'From')}")
         print(f"To: {get_header(headers, 'To')}")
         for header_name in ('Cc', 'Bcc'):
@@ -232,6 +346,91 @@ def cmd_read(args: argparse.Namespace) -> int:
 
         body = get_body(msg.get('payload', {}))
         print(body.strip() if body else '(No body content)')
+
+        # The payload is already format='full', so naming the attachments costs
+        # nothing — and without it the body reads as the whole message.
+        if attachments := attachment_summaries(msg.get('payload', {})):
+            listed = ', '.join(
+                f"{a['filename']} ({human_size(a['size'])} {a['mime_type']})"
+                for a in attachments
+            )
+            print('\n---')
+            print(f'Attachments ({len(attachments)}): {listed}')
+            print(f"→ gmail materialize {msg['id']} -o <dir>")
+
+    return 0
+
+
+def resolve_thread(service, ident: str) -> dict | None:
+    """Fetch a thread by its id, or by the id of any message inside it.
+
+    Every other command prints message ids, so a message id is what a caller
+    actually holds. Trying threads.get first keeps the common case at one call
+    and only pays for the lookup when the id turns out to be a message's.
+    """
+    threads = service.users().threads()
+
+    try:
+        return threads.get(userId='me', id=ident, format='full').execute()
+    except HttpError:
+        pass
+
+    try:
+        msg = service.users().messages().get(
+            userId='me', id=ident, format='minimal'
+        ).execute()
+        return threads.get(userId='me', id=msg['threadId'], format='full').execute()
+    except HttpError as exc:
+        print(f'Error: no thread or message with id {ident}: {exc}', file=sys.stderr)
+        return None
+
+
+def message_marks(msg: dict) -> list[str]:
+    """The badges that change how a thread line should be read: 📎 N, unread."""
+    marks = []
+
+    count = sum(1 for _ in iter_attachment_parts(msg.get('payload', {})))
+    if count:
+        marks.append(f'📎 {count}')
+
+    if 'UNREAD' in msg.get('labelIds', []):
+        marks.append('unread')
+
+    return marks
+
+
+def cmd_thread(args: argparse.Namespace) -> int:
+    """Show the shape of a thread: one line per message, snippets not bodies."""
+    service = authenticate(args.account)
+
+    thread = resolve_thread(service, args.id)
+    if thread is None:
+        return 1
+
+    messages = in_time_order(thread.get('messages', []))
+    if not messages:
+        print(f"Thread {thread['id']} has no messages.")
+        return 0
+
+    opening = messages[0].get('payload', {}).get('headers', [])
+    subject = get_header(opening, 'Subject') or '(no subject)'
+    plural = '' if len(messages) == 1 else 's'
+    print(f"Thread: {thread['id']} · \"{subject}\" · {len(messages)} message{plural}")
+
+    for i, msg in enumerate(messages, 1):
+        headers = msg.get('payload', {}).get('headers', [])
+        fields = [
+            f"[{i}] {msg['id']}",
+            format_date(msg.get('internalDate', '0')),
+            get_header(headers, 'From'),
+            *message_marks(msg),
+        ]
+        print(' · '.join(fields))
+        if snippet := clean_snippet(msg.get('snippet', ''), limit=100):
+            print(f'    "{snippet}"')
+
+    last = messages[-1]['id']
+    print(f'\n→ gmail read {last} · gmail materialize {last} -o <dir>')
 
     return 0
 
@@ -339,6 +538,40 @@ def run_scoped_path() -> Callable[[Path, str], Path]:
         return path
 
     return allocate
+
+
+def human_size(num_bytes: int) -> str:
+    """Render a byte count the way a file listing would: 812B, 52KB, 1.4MB."""
+    size = float(num_bytes)
+    for unit in ('B', 'KB', 'MB'):
+        if size < 1024:
+            return f'{size:.0f}{unit}' if size >= 10 or unit == 'B' else f'{size:.1f}{unit}'
+        size /= 1024
+    return f'{size:.1f}GB'
+
+
+def attachment_summaries(payload: dict) -> list[dict]:
+    """Name every attachment in a payload without downloading any of it.
+
+    Sizes come from `body.size`, which a format='full' message already carries,
+    so this costs no API calls. The names are the ones `materialize` would write
+    — same sanitizing, same '-1'/'-2' de-duping — so the listing is a prediction
+    of the directory rather than a second, differently-spelled truth.
+    """
+    allocate = run_scoped_path()
+    summaries = []
+
+    for part in iter_attachment_parts(payload):
+        name = safe_filename(part['filename'])
+        if name is None:
+            continue
+        summaries.append({
+            'filename': allocate(Path('.'), name).name,
+            'mime_type': part.get('mimeType', 'application/octet-stream'),
+            'size': part.get('body', {}).get('size', 0),
+        })
+
+    return summaries
 
 
 def save_attachments(
