@@ -261,3 +261,38 @@ def test_parts_rejects_multiple_message_ids(monkeypatch, capsys):
     assert run(monkeypatch, service, ['m1', 'm2'], show_parts=True) == 1
 
     assert 'require exactly one message ID' in capsys.readouterr().err
+
+
+def test_read_admits_it_chose_between_body_alternatives(monkeypatch, capsys):
+    """Without this line, a stale plain-text half reads as the whole message."""
+    service = fake_service({'m1': message('m1', payload=alternative_payload())})
+
+    assert run(monkeypatch, service, ['m1']) == 0
+
+    out = capsys.readouterr().out
+    assert '2 body alternatives (text/plain, text/html); one is shown above' in out
+    assert '→ gmail read m1 --parts' in out
+
+
+def test_single_body_message_says_nothing_about_alternatives(monkeypatch, capsys):
+    """Every disclosure line stays silent when there is nothing to disclose."""
+    service = fake_service({'m1': message('m1')})
+
+    assert run(monkeypatch, service, ['m1']) == 0
+
+    out = capsys.readouterr().out
+    assert 'body alternatives' not in out
+    assert '--parts' not in out
+
+
+def test_attachments_alone_do_not_count_as_alternatives(monkeypatch, capsys):
+    """A PDF is not a second version of the body, however many parts there are."""
+    payload = part(mime='multipart/mixed', size=0, parts=[
+        part(mime='text/plain', body_text='Only one body.', size=14),
+        part('receipt.pdf', 'pdf1', mime='application/pdf', size=32_768),
+    ])
+    service = fake_service({'m1': message('m1', payload=payload)})
+
+    assert run(monkeypatch, service, ['m1']) == 0
+
+    assert 'body alternatives' not in capsys.readouterr().out

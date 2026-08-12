@@ -104,6 +104,21 @@ def iter_mime_parts(part: dict, depth: int = 0) -> Iterator[tuple[dict, int]]:
         yield from iter_mime_parts(subpart, depth + 1)
 
 
+def body_alternatives(payload: dict) -> list[str]:
+    """Mime types of every text part that could have been shown as the body.
+
+    `get_body` picks one and the rest go invisible, which is exactly how a
+    stale plain-text alternative reads as the whole message. Listing them is
+    what lets `read` admit it made a choice.
+    """
+    return [
+        part.get('mimeType', '')
+        for part, _ in iter_mime_parts(payload)
+        if part.get('mimeType', '').startswith('text/')
+        and part.get('body', {}).get('data')
+    ]
+
+
 def print_mime_tree(payload: dict, message_id: str) -> None:
     """Expose every alternative without choosing one as the rendered body."""
     indexed = list(enumerate(iter_mime_parts(payload), 1))
@@ -427,6 +442,15 @@ def cmd_read(args: argparse.Namespace) -> int:
 
         body = get_body(msg.get('payload', {}))
         print(body.strip() if body else '(No body content)')
+
+        # Say out loud that a body was chosen. Reading the plain-text half of a
+        # message whose html half had changed is the failure this exists for:
+        # nothing in the output hinted that a second version was even there.
+        if len(alternatives := body_alternatives(msg.get('payload', {}))) > 1:
+            print('\n---')
+            print(f"{len(alternatives)} body alternatives "
+                  f"({', '.join(alternatives)}); one is shown above")
+            print(f"→ gmail read {msg['id']} --parts")
 
         # The payload is already format='full', so naming the attachments costs
         # nothing — and without it the body reads as the whole message.

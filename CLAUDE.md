@@ -118,6 +118,12 @@ the plain-text part hides that discrepancy. `read <id> --parts` shows the MIME t
 and its real part indexes instead of choosing a body; `--part N` then decodes one text
 part unchanged, so the two alternatives can be compared directly.
 
+**`read` names `--parts` itself when there is more than one body alternative**, because
+a flag nobody knows about does not close that gap — you would have to already suspect a
+discrepancy to go looking, and suspecting it is the hard part. This is the ladder rule
+applied one rung further, and it obeys the same silence rule: a message with a single
+body says nothing, and attachments alone are not alternatives.
+
 The context is not paid for twice. `list` fetches each *distinct thread* once
 via `threads.get(format='metadata')`, which returns every sibling's headers, and
 that response feeds the row headers too — so it replaces the old per-message
