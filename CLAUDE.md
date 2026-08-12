@@ -151,6 +151,15 @@ Gmail has no list-valued criteria, and its own settings UI writes `a OR b` the s
 `--label` resolves names to ids through the allocator `label` uses, so a missing label is
 created rather than rejected.
 
+**`forwarding add` cannot work from a user credential.** Google restricts writes to
+`forwardingAddresses` to service accounts holding domain-wide delegation and answers
+403 "Access restricted to service accounts that have been delegated domain-wide
+authority" — the `gmail.settings.sharing` scope is necessary but not sufficient, and
+re-consenting never fixes it. The command catches that 403 and prints the manual path
+(Gmail → Settings → Forwarding and POP/IMAP → Add a forwarding address). Reading the
+list works fine, which is what `filters add --forward` needs. Verified against the real
+API on 2026-08-12; `filters` create/list/delete do work from a user credential.
+
 `drive read` accepts a bare file ID or any Drive/Docs URL. Google-native files are
 exported: docs -> markdown, sheets -> CSV, slides -> plain text. Override with `--mime`.
 
@@ -200,8 +209,10 @@ Re-consent after a scope change goes through the same path, since
 - `gmail.compose` - send/reply/drafts
 - `gmail.modify` - archive
 - `gmail.settings.basic` - filters commands
-- `gmail.settings.sharing` - forwarding commands (Google gates "can route mail out of
-  this account" behind the wider scope; `settings.basic` alone cannot add one)
+- `gmail.settings.sharing` - forwarding commands. Necessary but not sufficient: Google
+  additionally restricts the *write* side to domain-wide-delegated service accounts, so
+  only listing is reachable here. Kept for the read path and any future service-account
+  route; drop it if you'd rather hold a narrower consent.
 - `calendar` - cal commands
 - `drive.readonly` - drive commands
 - `documents` - docs commands (read/write, all docs; Google has no per-file Docs scope)

@@ -175,13 +175,38 @@ def cmd_forwarding_list(args: argparse.Namespace) -> int:
     return 0
 
 
+def explain_domain_wide_only(email: str) -> None:
+    """Point at the settings UI, the only path a user credential has left.
+
+    Google restricts writes to forwardingAddresses to service accounts holding
+    domain-wide delegation — the `gmail.settings.sharing` scope is necessary but
+    not sufficient, and no amount of re-consent changes that.
+    """
+    print('Error: Google restricts adding a forwarding address to service accounts',
+          file=sys.stderr)
+    print('with domain-wide delegation. A user credential cannot do it, however',
+          file=sys.stderr)
+    print('broadly scoped. Add it by hand instead:', file=sys.stderr)
+    print('  Gmail -> Settings -> Forwarding and POP/IMAP -> Add a forwarding address',
+          file=sys.stderr)
+    print(f'  -> {email}, then have them click the link Google mails.', file=sys.stderr)
+    print('Leave "Forward a copy of incoming mail" OFF — a filter forwards per-message.',
+          file=sys.stderr)
+
+
 def cmd_forwarding_add(args: argparse.Namespace) -> int:
     """Register a forwarding address, which usually mails it a confirmation link."""
     service = authenticate(args.account)
 
     body = {'forwardingEmail': args.email}
-    created = settings(service).forwardingAddresses().create(
-        userId='me', body=body).execute()
+    try:
+        created = settings(service).forwardingAddresses().create(
+            userId='me', body=body).execute()
+    except HttpError as exc:
+        if exc.resp.status == 403:
+            explain_domain_wide_only(args.email)
+            return 1
+        raise
 
     status = created.get('verificationStatus', 'unknown')
     print(f"Added forwarding address: {created['forwardingEmail']} ({status})")

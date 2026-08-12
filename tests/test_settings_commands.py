@@ -4,6 +4,7 @@ import argparse
 from unittest.mock import MagicMock
 
 import pytest
+from googleapiclient.errors import HttpError
 
 import settings_commands
 
@@ -153,6 +154,25 @@ def test_forwarding_list_reports_verification_status(authed, capsys):
 
     assert settings_commands.cmd_forwarding_list(argparse.Namespace(account=None)) == 0
     assert 'lihu@askeffi.ai\tpending' in capsys.readouterr().out
+
+
+def test_forwarding_add_403_points_at_the_settings_ui(authed, capsys):
+    """Google allows this write only from a domain-wide-delegated service account.
+
+    Re-consenting cannot fix it, so the error has to name the manual path.
+    """
+    service = authed(fake_service())
+    settings = service.users.return_value.settings.return_value
+    settings.forwardingAddresses.return_value.create.return_value.execute.side_effect = (
+        HttpError(MagicMock(status=403), b'domain-wide authority')
+    )
+
+    args = argparse.Namespace(account=None, email='lihu@askeffi.ai')
+    assert settings_commands.cmd_forwarding_add(args) == 1
+
+    err = capsys.readouterr().err
+    assert 'Forwarding and POP/IMAP' in err
+    assert 'lihu@askeffi.ai' in err
 
 
 def test_forwarding_add_says_the_link_must_be_clicked(authed, capsys):
