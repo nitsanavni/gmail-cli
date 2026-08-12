@@ -97,6 +97,65 @@ def get_body(payload: dict) -> str:
     return ''
 
 
+def iter_mime_parts(part: dict, depth: int = 0) -> Iterator[tuple[dict, int]]:
+    """Walk containers as well as leaves so displayed indexes match the MIME tree."""
+    yield part, depth
+    for subpart in part.get('parts', []):
+        yield from iter_mime_parts(subpart, depth + 1)
+
+
+def print_mime_tree(payload: dict, message_id: str) -> None:
+    """Expose every alternative without choosing one as the rendered body."""
+    indexed = list(enumerate(iter_mime_parts(payload), 1))
+
+    for index, (part, depth) in indexed:
+        mime_type = part.get('mimeType', 'application/octet-stream')
+        line = f'{index:3}  {"  " * depth}{mime_type}'
+
+        size = part.get('body', {}).get('size')
+        is_container = mime_type.startswith('multipart/') or 'parts' in part
+        if size is not None and (size or not is_container):
+            line += f'  {human_size(size)}'
+
+        if filename := part.get('filename'):
+            line += f'  {filename}'
+
+        print(line)
+
+    # A text leaf is the useful next rung. Messages without one still name a
+    # real index; `--part` will explain why Gmail's attachment path is needed.
+    next_index = next(
+        (index for index, (part, _) in indexed
+         if part.get('mimeType', '').startswith('text/')),
+        1,
+    )
+    print(f'\n→ gmail read {message_id} --part {next_index}')
+
+
+def print_mime_part(payload: dict, message_id: str, index: int) -> int:
+    """Decode one indexed text alternative without rendered-body conversion."""
+    parts = list(iter_mime_parts(payload))
+    if not 1 <= index <= len(parts):
+        print(
+            f'Error: part {index} is out of range; valid range is 1-{len(parts)}',
+            file=sys.stderr,
+        )
+        return 1
+
+    part, _ = parts[index - 1]
+    mime_type = part.get('mimeType', 'application/octet-stream')
+    if not mime_type.startswith('text/'):
+        print(
+            f'Error: part {index} is {mime_type}, not text; '
+            f'use: gmail attachments {message_id}',
+            file=sys.stderr,
+        )
+        return 1
+
+    sys.stdout.write(decode_body(part.get('body', {}).get('data', '')))
+    return 0
+
+
 def get_body_content(args: argparse.Namespace) -> str | None:
     """Get message body from args (--body or --file)."""
     if args.file:
@@ -293,6 +352,21 @@ def cmd_list(args: argparse.Namespace) -> int:
 
 def cmd_read(args: argparse.Namespace) -> int:
     """Read full email content."""
+    show_parts = getattr(args, 'parts', False)
+    part_index = getattr(args, 'part', None)
+
+    if show_parts and part_index is not None:
+        print('Error: --parts and --part cannot be used together', file=sys.stderr)
+        return 1
+
+    if (show_parts or part_index is not None) and (args.query or len(args.ids) != 1):
+        print(
+            'Error: --parts and --part require exactly one message ID '
+            'and cannot be used with --query',
+            file=sys.stderr,
+        )
+        return 1
+
     service = authenticate(args.account)
 
     # Get message IDs from args or query
@@ -324,6 +398,9 @@ def cmd_read(args: argparse.Namespace) -> int:
             format='full'
         ).execute()
 
+        if part_index is not None:
+            return print_mime_part(msg.get('payload', {}), msg['id'], part_index)
+
         thread_id = msg['threadId']
         if thread_id not in threads:
             threads[thread_id] = thread_siblings(service, thread_id)
@@ -343,6 +420,10 @@ def cmd_read(args: argparse.Namespace) -> int:
         print(f"Subject: {get_header(headers, 'Subject')}")
         print(f"Date: {format_date(msg.get('internalDate', '0'))}")
         print('\n---\n')
+
+        if show_parts:
+            print_mime_tree(msg.get('payload', {}), msg['id'])
+            continue
 
         body = get_body(msg.get('payload', {}))
         print(body.strip() if body else '(No body content)')

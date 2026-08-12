@@ -56,10 +56,27 @@ def fake_service(messages, siblings=None):
     return service
 
 
-def run(monkeypatch, service, ids):
+def run(monkeypatch, service, ids, *, show_parts=False, part_number=None, query=None):
     monkeypatch.setattr(commands, 'authenticate', lambda account: service)
-    args = argparse.Namespace(account=None, ids=ids, query=None, limit=10)
+    args = argparse.Namespace(
+        account=None,
+        ids=ids,
+        query=query,
+        limit=10,
+        parts=show_parts,
+        part=part_number,
+    )
     return commands.cmd_read(args)
+
+
+def alternative_payload():
+    return part(mime='multipart/mixed', size=0, parts=[
+        part(mime='multipart/alternative', size=0, parts=[
+            part(mime='text/plain', body_text='The old plain text.', size=902),
+            part(mime='text/html', body_text='<p>The changed HTML.</p>', size=47_309),
+        ]),
+        part('Invoice-WHOTRWQL-0028.pdf', 'pdf1', mime='application/pdf', size=32_768),
+    ])
 
 
 def test_thread_id_line_carries_the_position(monkeypatch, capsys):
@@ -164,3 +181,83 @@ def test_human_size_reads_like_a_file_listing():
     assert commands.human_size(53000) == '52KB'
     assert commands.human_size(5300) == '5.2KB'
     assert commands.human_size(1_500_000) == '1.4MB'
+
+
+def test_parts_renders_the_nested_tree_in_preorder(monkeypatch, capsys):
+    service = fake_service(
+        {'m1': message('m1', payload=alternative_payload())},
+        {'t1': [sibling('m1', 1)]},
+    )
+
+    assert run(monkeypatch, service, ['m1'], show_parts=True) == 0
+
+    tree = capsys.readouterr().out.split('---\n\n', 1)[1]
+    assert tree == (
+        '  1  multipart/mixed\n'
+        '  2    multipart/alternative\n'
+        '  3      text/plain  902B\n'
+        '  4      text/html  46KB\n'
+        '  5    application/pdf  32KB  Invoice-WHOTRWQL-0028.pdf\n'
+        '\n'
+        '→ gmail read m1 --part 3\n'
+    )
+
+
+def test_part_decodes_the_html_sibling_without_rendering_it(monkeypatch, capsys):
+    service = fake_service({'m1': message('m1', payload=alternative_payload())})
+
+    assert run(monkeypatch, service, ['m1'], part_number=4) == 0
+
+    captured = capsys.readouterr()
+    assert captured.out == '<p>The changed HTML.</p>'
+    assert captured.err == ''
+
+
+def test_part_out_of_range_names_the_valid_range(monkeypatch, capsys):
+    service = fake_service({'m1': message('m1', payload=alternative_payload())})
+
+    assert run(monkeypatch, service, ['m1'], part_number=6) == 1
+
+    captured = capsys.readouterr()
+    assert captured.out == ''
+    assert 'valid range is 1-5' in captured.err
+
+
+def test_part_rejects_an_attachment_and_names_the_command(monkeypatch, capsys):
+    service = fake_service({'m1': message('m1', payload=alternative_payload())})
+
+    assert run(monkeypatch, service, ['m1'], part_number=5) == 1
+
+    captured = capsys.readouterr()
+    assert captured.out == ''
+    assert 'part 5 is application/pdf, not text' in captured.err
+    assert 'gmail attachments m1' in captured.err
+
+
+def test_parts_and_part_are_mutually_exclusive(monkeypatch, capsys):
+    service = fake_service({'m1': message('m1', payload=alternative_payload())})
+
+    assert run(
+        monkeypatch, service, ['m1'], show_parts=True, part_number=3
+    ) == 1
+
+    assert '--parts and --part cannot be used together' in capsys.readouterr().err
+
+
+def test_part_rejects_query_reads_as_ambiguous(monkeypatch, capsys):
+    service = fake_service({})
+
+    assert run(monkeypatch, service, [], part_number=1, query='is:unread') == 1
+
+    error = capsys.readouterr().err
+    assert 'require exactly one message ID' in error
+    assert 'cannot be used with --query' in error
+    service.users.return_value.messages.return_value.list.assert_not_called()
+
+
+def test_parts_rejects_multiple_message_ids(monkeypatch, capsys):
+    service = fake_service({})
+
+    assert run(monkeypatch, service, ['m1', 'm2'], show_parts=True) == 1
+
+    assert 'require exactly one message ID' in capsys.readouterr().err

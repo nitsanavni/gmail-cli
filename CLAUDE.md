@@ -29,6 +29,8 @@ uv run gmail_cli.py thread <thread-id>
 # Read emails (by ID or query)
 uv run gmail_cli.py read <message-id> [<message-id> ...]
 uv run gmail_cli.py read --query "is:unread" --limit 5
+uv run gmail_cli.py read <message-id> --parts
+uv run gmail_cli.py read <message-id> --part N
 
 # Send email
 uv run gmail_cli.py send --to "user@example.com" --subject "Subject" --body "Body"
@@ -109,6 +111,12 @@ instead of bodies; `read` prints the body, its position in the thread, and the
 attachment manifest. Every level omits its extra lines when there is nothing to
 disclose — a thread of one, a message with no attachments — so the common clean
 case reads exactly as it did before.
+
+A rendered body is still a choice, not a complete account of what arrived:
+`multipart/alternative` can carry stale plain text beside changed HTML, and preferring
+the plain-text part hides that discrepancy. `read <id> --parts` shows the MIME tree
+and its real part indexes instead of choosing a body; `--part N` then decodes one text
+part unchanged, so the two alternatives can be compared directly.
 
 The context is not paid for twice. `list` fetches each *distinct thread* once
 via `threads.get(format='metadata')`, which returns every sibling's headers, and

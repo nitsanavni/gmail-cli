@@ -97,6 +97,10 @@ def main() -> int:
     read_parser.add_argument('--query', '-q', help='Gmail search query')
     read_parser.add_argument('--limit', '-n', type=int, default=10,
                             help='Max messages when using query (default: 10)')
+    read_parser.add_argument('--parts', action='store_true',
+                             help='Print the MIME tree instead of the body')
+    read_parser.add_argument('--part', type=int, metavar='N',
+                             help='Print decoded content of MIME part N only')
     read_parser.set_defaults(func=cmd_read)
 
     # thread command
