@@ -56,6 +56,16 @@ uv run gmail_cli.py labels                                       # List them
 uv run gmail_cli.py label <message-id> --add "factory/seen"      # Created if missing
 uv run gmail_cli.py label <message-id> --add A --add B --remove UNREAD
 
+# Filters and forwarding
+uv run gmail_cli.py filters                                      # List them
+uv run gmail_cli.py filters add --from a@x.com --from b@y.com \
+    --has-attachment --forward someone@example.com               # OR-joined senders
+uv run gmail_cli.py filters add --query "..." --label accounting --archive
+uv run gmail_cli.py filters remove <filter-id>
+uv run gmail_cli.py forwarding                                   # Address + status
+uv run gmail_cli.py forwarding add someone@example.com           # Mails a confirmation
+uv run gmail_cli.py forwarding remove someone@example.com
+
 # Google Drive (read-only)
 uv run gmail_cli.py drive list                    # Recently modified files
 uv run gmail_cli.py drive list --shared           # Only files shared with me
@@ -131,6 +141,16 @@ it. System labels are addressable by name too, so `--remove UNREAD` marks read a
 `--remove INBOX` archives. `--remove` of a label the account has never had is
 reported on stderr and skipped, not an error — the end state already holds.
 
+Filters and forwarding addresses are **two APIs behind two scopes with one ordering
+constraint**: a filter may only forward to an address the account has already
+*accepted*, and registering one usually mails the recipient a confirmation link they
+must click. `filters add --forward` checks the address's verification status first and
+prints the `forwarding add` command, because the raw API failure is an opaque 400.
+Repeated `--from`/`--to`/`--subject` are OR-joined into a single criterion string —
+Gmail has no list-valued criteria, and its own settings UI writes `a OR b` the same way.
+`--label` resolves names to ids through the allocator `label` uses, so a missing label is
+created rather than rejected.
+
 `drive read` accepts a bare file ID or any Drive/Docs URL. Google-native files are
 exported: docs -> markdown, sheets -> CSV, slides -> plain text. Override with `--mime`.
 
@@ -179,6 +199,9 @@ Re-consent after a scope change goes through the same path, since
 - `gmail.readonly` - list/read
 - `gmail.compose` - send/reply/drafts
 - `gmail.modify` - archive
+- `gmail.settings.basic` - filters commands
+- `gmail.settings.sharing` - forwarding commands (Google gates "can route mail out of
+  this account" behind the wider scope; `settings.basic` alone cannot add one)
 - `calendar` - cal commands
 - `drive.readonly` - drive commands
 - `documents` - docs commands (read/write, all docs; Google has no per-file Docs scope)

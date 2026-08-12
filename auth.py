@@ -19,6 +19,10 @@ SCOPES = [
     'https://www.googleapis.com/auth/gmail.readonly',
     'https://www.googleapis.com/auth/gmail.compose',
     'https://www.googleapis.com/auth/gmail.modify',
+    # Filters need settings.basic; forwarding addresses need settings.sharing
+    # (Google gates "can route mail out of this account" behind the wider one).
+    'https://www.googleapis.com/auth/gmail.settings.basic',
+    'https://www.googleapis.com/auth/gmail.settings.sharing',
     'https://www.googleapis.com/auth/calendar',
     # Full drive (supersedes drive.readonly): comment replies need write access,
     # and drive.file would not reach pre-existing docs.

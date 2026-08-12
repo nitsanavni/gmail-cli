@@ -34,6 +34,14 @@ from commands import (
     cmd_thread,
 )
 from docs_commands import cmd_docs_append, cmd_docs_create, cmd_docs_watch
+from settings_commands import (
+    cmd_filters_add,
+    cmd_filters_list,
+    cmd_filters_remove,
+    cmd_forwarding_add,
+    cmd_forwarding_list,
+    cmd_forwarding_remove,
+)
 from guide_commands import cmd_guide, guide_hint
 from drive_commands import (
     cmd_drive_comment_add,
@@ -161,6 +169,65 @@ def main() -> int:
     subparsers.add_parser(
         'labels', help='List labels on the account'
     ).set_defaults(func=cmd_labels)
+
+    # filters command — bare `filters` lists; sub-parsers override func
+    filters_parser = subparsers.add_parser(
+        'filters', help='List/add/remove Gmail filters')
+    filters_parser.set_defaults(func=cmd_filters_list)
+    filters_subparsers = filters_parser.add_subparsers(dest='filters_action')
+
+    filters_subparsers.add_parser(
+        'list', help='List filters'
+    ).set_defaults(func=cmd_filters_list)
+
+    filters_add_parser = filters_subparsers.add_parser(
+        'add', help='Create a filter (repeated criteria are OR-joined)')
+    filters_add_parser.add_argument('--from', dest='from_', action='append',
+                                    help='Sender to match (repeatable)')
+    filters_add_parser.add_argument('--to', action='append',
+                                    help='Recipient to match (repeatable)')
+    filters_add_parser.add_argument('--subject', action='append',
+                                    help='Subject text to match (repeatable)')
+    filters_add_parser.add_argument('--query', help='Raw Gmail search query')
+    filters_add_parser.add_argument('--not-query',
+                                    help='Raw Gmail search query that must NOT match')
+    filters_add_parser.add_argument('--has-attachment', action='store_true',
+                                    help='Only match messages with an attachment')
+    filters_add_parser.add_argument('--forward',
+                                    help='Forward to this verified address')
+    filters_add_parser.add_argument('--label', action='append',
+                                    help='Label to apply, created if missing '
+                                         '(repeatable)')
+    filters_add_parser.add_argument('--archive', action='store_true',
+                                    help='Skip the inbox')
+    filters_add_parser.add_argument('--mark-read', action='store_true',
+                                    help='Mark as read')
+    filters_add_parser.set_defaults(func=cmd_filters_add)
+
+    filters_remove_parser = filters_subparsers.add_parser(
+        'remove', help='Delete a filter by id')
+    filters_remove_parser.add_argument('id', help='Filter ID (see: gmail filters)')
+    filters_remove_parser.set_defaults(func=cmd_filters_remove)
+
+    # forwarding command — bare `forwarding` lists; sub-parsers override func
+    forwarding_parser = subparsers.add_parser(
+        'forwarding', help='Manage forwarding addresses a filter may forward to')
+    forwarding_parser.set_defaults(func=cmd_forwarding_list)
+    forwarding_subparsers = forwarding_parser.add_subparsers(dest='forwarding_action')
+
+    forwarding_subparsers.add_parser(
+        'list', help='List forwarding addresses and verification status'
+    ).set_defaults(func=cmd_forwarding_list)
+
+    forwarding_add_parser = forwarding_subparsers.add_parser(
+        'add', help='Register an address (Google mails it a confirmation link)')
+    forwarding_add_parser.add_argument('email', help='Address to forward to')
+    forwarding_add_parser.set_defaults(func=cmd_forwarding_add)
+
+    forwarding_remove_parser = forwarding_subparsers.add_parser(
+        'remove', help='Unregister a forwarding address')
+    forwarding_remove_parser.add_argument('email', help='Address to remove')
+    forwarding_remove_parser.set_defaults(func=cmd_forwarding_remove)
 
     # archive command
     archive_parser = subparsers.add_parser('archive', help='Archive emails')
