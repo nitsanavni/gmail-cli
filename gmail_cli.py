@@ -67,6 +67,13 @@ def add_compose_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument('--attach', action='append', help='File to attach (repeatable)')
 
 
+def non_empty_text(value: str) -> str:
+    """Reject empty command-line text values."""
+    if not value.strip():
+        raise argparse.ArgumentTypeError('must not be empty')
+    return value
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description='Gmail CLI - email, calendar, Drive and Docs',
@@ -280,6 +287,9 @@ def main() -> int:
     cal_delete_parser.add_argument('event_id', help='Event ID')
     cal_delete_parser.add_argument('--yes', '-y', action='store_true',
                                    help='Skip confirmation prompt')
+    cal_delete_parser.add_argument(
+        '--note', type=non_empty_text,
+        help='Notify attendees with this cancellation explanation')
     cal_delete_parser.add_argument('--calendar', '-c', default='primary',
                                    help='Calendar ID (default: primary)')
     cal_delete_parser.set_defaults(func=cmd_cal_delete)

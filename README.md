@@ -195,6 +195,21 @@ A `/` in a name is what Gmail renders as nesting — `factory/seen` shows up und
 `factory` in the sidebar. System labels work by name, so `--remove UNREAD` marks a
 message read and `--remove INBOX` archives it.
 
+### Google Calendar
+
+```bash
+# List upcoming events
+uv run gmail_cli.py cal list --days 14
+
+# Cancel an event and tell attendees why
+uv run gmail_cli.py cal delete <event-id> --note "Speaker is unavailable"
+```
+
+With `--note`, the command first renames the event to `[Cancelled] <old title>`
+and prepends the explanation to its description, notifying all attendees. It
+then deletes the event and sends the normal cancellation notification. Google
+Calendar may therefore send two notifications: one update and one cancellation.
+
 ### Google Drive (read-only)
 
 ```bash

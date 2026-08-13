@@ -68,6 +68,11 @@ uv run gmail_cli.py forwarding                                   # Address + sta
 uv run gmail_cli.py forwarding add someone@example.com           # Mails a confirmation
 uv run gmail_cli.py forwarding remove someone@example.com
 
+# Google Calendar
+uv run gmail_cli.py cal list
+uv run gmail_cli.py cal add "Workshop" --when "2026-08-20 10:00"
+uv run gmail_cli.py cal delete <event-id> --note "Speaker is unavailable"
+
 # Google Drive (read-only)
 uv run gmail_cli.py drive list                    # Recently modified files
 uv run gmail_cli.py drive list --shared           # Only files shared with me

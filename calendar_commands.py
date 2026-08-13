@@ -126,7 +126,24 @@ def cmd_cal_delete(args: argparse.Namespace) -> int:
         if answer.strip().lower() != 'y':
             print('Aborted.')
             return 1
-    service.events().delete(calendarId=args.calendar, eventId=args.event_id).execute()
+    if args.note is not None:
+        summary = event.get('summary', '(no title)')
+        description = event.get('description', '')
+        updated_description = (
+            f'{args.note}\n\n{description}' if description else args.note
+        )
+        service.events().patch(
+            calendarId=args.calendar,
+            eventId=args.event_id,
+            body={
+                'summary': f'[Cancelled] {summary}',
+                'description': updated_description,
+            },
+            sendUpdates='all',
+        ).execute()
+    service.events().delete(
+        calendarId=args.calendar, eventId=args.event_id, sendUpdates='all'
+    ).execute()
     print(f"Deleted: {format_event(event)}")
     return 0
 
