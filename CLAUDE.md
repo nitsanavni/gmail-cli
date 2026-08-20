@@ -58,6 +58,11 @@ uv run gmail_cli.py labels                                       # List them
 uv run gmail_cli.py label <message-id> --add "factory/seen"      # Created if missing
 uv run gmail_cli.py label <message-id> --add A --add B --remove UNREAD
 
+# Archive (out of the inbox, still in All Mail) vs trash (deleted in 30 days)
+uv run gmail_cli.py archive <message-id> [<message-id> ...]
+uv run gmail_cli.py trash <message-id> [<message-id> ...]
+uv run gmail_cli.py list -q "..." --ids-only | uv run gmail_cli.py trash
+
 # Filters and forwarding
 uv run gmail_cli.py filters                                      # List them
 uv run gmail_cli.py filters add --from a@x.com --from b@y.com \
@@ -226,7 +231,7 @@ Re-consent after a scope change goes through the same path, since
 
 - `gmail.readonly` - list/read
 - `gmail.compose` - send/reply/drafts
-- `gmail.modify` - archive
+- `gmail.modify` - archive, label, trash
 - `gmail.settings.basic` - filters commands
 - `gmail.settings.sharing` - forwarding commands. Necessary but not sufficient: Google
   additionally restricts the *write* side to domain-wide-delegated service accounts, so

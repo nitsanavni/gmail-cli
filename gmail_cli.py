@@ -32,6 +32,7 @@ from commands import (
     cmd_reply,
     cmd_send,
     cmd_thread,
+    cmd_trash,
 )
 from docs_commands import cmd_docs_append, cmd_docs_create, cmd_docs_watch
 from settings_commands import (
@@ -244,6 +245,12 @@ def main() -> int:
     archive_parser = subparsers.add_parser('archive', help='Archive emails')
     archive_parser.add_argument('ids', nargs='+', help='Message IDs to archive')
     archive_parser.set_defaults(func=cmd_archive)
+
+    # trash command
+    trash_parser = subparsers.add_parser('trash', help='Move emails to the Trash')
+    trash_parser.add_argument('ids', nargs='*',
+                              help='Message IDs to trash (default: one per line on stdin)')
+    trash_parser.set_defaults(func=cmd_trash)
 
     # cal command
     cal_parser = subparsers.add_parser('cal', help='Google Calendar')

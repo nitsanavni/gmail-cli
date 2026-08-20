@@ -832,6 +832,32 @@ def cmd_archive(args: argparse.Namespace) -> int:
     return 0
 
 
+def message_ids_from_args(args: argparse.Namespace) -> list[str]:
+    """Message IDs from argv, falling back to one per line on stdin.
+
+    Bulk cleanups pipe the output of `list --ids-only` straight in, and argv
+    runs out of room long before a mailbox does.
+    """
+    if args.ids:
+        return args.ids
+    return [line.strip() for line in sys.stdin if line.strip()]
+
+
+def cmd_trash(args: argparse.Namespace) -> int:
+    """Move emails to the Trash.
+
+    Gmail keeps trashed mail for 30 days, so this is reversible by hand in the
+    UI; there is deliberately no permanent-delete command here.
+    """
+    service = authenticate(args.account)
+
+    for msg_id in message_ids_from_args(args):
+        service.users().messages().trash(userId='me', id=msg_id).execute()
+        print(f'Trashed: {msg_id}')
+
+    return 0
+
+
 def label_ids_by_name(service) -> dict[str, str]:
     """Map every label name on the account to its id, system labels included."""
     result = service.users().labels().list(userId='me').execute()
