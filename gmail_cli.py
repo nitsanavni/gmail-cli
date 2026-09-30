@@ -279,6 +279,10 @@ def main() -> int:
                                 help='Attendee email (repeatable; sends invites)')
     cal_add_parser.add_argument('--calendar', '-c', default='primary',
                                 help='Calendar ID (default: primary)')
+    cal_add_parser.add_argument('--recur',
+                                help="Recurrence RRULE, e.g. 'FREQ=WEEKLY;BYDAY=WE'")
+    cal_add_parser.add_argument('--timezone', default='Europe/Madrid',
+                                help='IANA time zone for recurring events (default: Europe/Madrid)')
     cal_add_parser.set_defaults(func=cmd_cal_add)
 
     cal_invite_parser = cal_subparsers.add_parser(

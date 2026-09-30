@@ -87,6 +87,13 @@ def cmd_cal_add(args: argparse.Namespace) -> int:
     if args.attendee:
         body['attendees'] = [{'email': email} for email in args.attendee]
 
+    if getattr(args, 'recur', None):
+        # Google requires an IANA timeZone on start/end for recurring timed events
+        if not all_day:
+            body['start']['timeZone'] = args.timezone
+            body['end']['timeZone'] = args.timezone
+        body['recurrence'] = [f"RRULE:{args.recur.removeprefix('RRULE:')}"]
+
     event = service.events().insert(
         calendarId=args.calendar, body=body,
         sendUpdates='all' if args.attendee else 'none',
