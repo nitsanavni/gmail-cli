@@ -180,7 +180,7 @@ def get_body_content(args: argparse.Namespace) -> str | None:
     return None
 
 
-def set_optional_recipients(message: MIMEText, args: argparse.Namespace) -> None:
+def set_optional_recipients(message: MIMEBase, args: argparse.Namespace) -> None:
     """Set CC and BCC headers on a message if provided in args."""
     if args.cc:
         message['Cc'] = ', '.join(args.cc)
@@ -188,13 +188,25 @@ def set_optional_recipients(message: MIMEText, args: argparse.Namespace) -> None
         message['Bcc'] = ', '.join(args.bcc)
 
 
-def build_message(body: str, attachments: list[str] | None) -> MIMEText | MIMEMultipart:
-    """Build a MIME message, with attachments if provided."""
+def body_to_html(body: str) -> str:
+    """Render a plain-text body as minimal HTML, keeping line breaks."""
+    return '<div dir="auto">' + html.escape(body).replace('\n', '<br>\n') + '</div>'
+
+
+def build_message(body: str, attachments: list[str] | None) -> MIMEMultipart:
+    """Build a MIME message with text and HTML alternatives, plus attachments.
+
+    The HTML part matters: Gmail opens a plain-text-only draft in plain-text
+    compose mode, which hard-wraps lines at ~78 columns when sent.
+    """
+    alternative = MIMEMultipart('alternative')
+    alternative.attach(MIMEText(body, 'plain', 'utf-8'))
+    alternative.attach(MIMEText(body_to_html(body), 'html', 'utf-8'))
     if not attachments:
-        return MIMEText(body)
+        return alternative
 
     msg = MIMEMultipart()
-    msg.attach(MIMEText(body))
+    msg.attach(alternative)
 
     for filepath in attachments:
         path = Path(filepath)
@@ -212,7 +224,7 @@ def build_message(body: str, attachments: list[str] | None) -> MIMEText | MIMEMu
     return msg
 
 
-def encode_message(message: MIMEText) -> str:
+def encode_message(message: MIMEBase) -> str:
     """Encode a MIME message for Gmail API."""
     return base64.urlsafe_b64encode(message.as_bytes()).decode('utf-8')
 
