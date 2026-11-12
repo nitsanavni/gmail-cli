@@ -5,11 +5,13 @@ import os
 import re
 import sys
 import webbrowser
+from datetime import datetime, timedelta, timezone
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, unquote, urlparse
 
+import requests
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import Flow, InstalledAppFlow
@@ -32,6 +34,8 @@ SCOPES = [
 
 BASE_DIR = Path(__file__).parent
 CREDENTIALS_PATH = BASE_DIR / 'credentials.json'
+TOKEN_URI = 'https://oauth2.googleapis.com/token'
+AUTH_URI = 'https://accounts.google.com/o/oauth2/auth'
 TOKEN_PREFIX = 'token-'
 TOKEN_SUFFIX = '.json'
 
@@ -43,6 +47,66 @@ HEADLESS_REDIRECT_URI = 'http://localhost:1/'
 # length floor is what tells a pasted code apart from a typed "yes" or "nope",
 # which are otherwise indistinguishable from one.
 BARE_CODE_RE = re.compile(r'[A-Za-z0-9._~%/-]{20,}')
+
+
+def proxy_secret_mode() -> bool:
+    """Opt-in cloud mode: an HTTPS proxy adds the client secret to token calls.
+
+    The proxy injects `Authorization: Basic base64(client_id:client_secret)` on
+    requests to oauth2.googleapis.com, so no credentials.json is needed and the
+    client_secret is never sent in (or read into) this process.
+    Requires GMAIL_CLI_PROXY_SECRET=1 and GMAIL_CLI_CLIENT_ID=<id>.
+    """
+    return os.environ.get('GMAIL_CLI_PROXY_SECRET') == '1'
+
+
+def proxy_client_id() -> str:
+    client_id = os.environ.get('GMAIL_CLI_CLIENT_ID')
+    if not client_id:
+        print('Error: GMAIL_CLI_PROXY_SECRET=1 requires GMAIL_CLI_CLIENT_ID.', file=sys.stderr)
+        sys.exit(1)
+    return client_id
+
+
+def _expiry(expires_in: Any) -> datetime:
+    # google-auth compares against a naive UTC datetime.
+    return (datetime.now(timezone.utc) + timedelta(seconds=int(expires_in))).replace(tzinfo=None)
+
+
+def proxy_token_request(data: dict[str, str]) -> dict[str, Any]:
+    """POST to the token endpoint with no client_secret; the proxy adds it."""
+    data = {**data, 'client_id': proxy_client_id()}
+    resp = requests.post(TOKEN_URI, data=data, timeout=30)
+    if resp.status_code != 200:
+        raise RuntimeError(f'{resp.status_code} {resp.text}')
+    return resp.json()
+
+
+def proxy_exchange_code(code: str) -> Credentials:
+    """Exchange an authorization code for credentials via the proxy."""
+    tok = proxy_token_request({
+        'grant_type': 'authorization_code',
+        'code': code,
+        'redirect_uri': HEADLESS_REDIRECT_URI,
+    })
+    return Credentials(
+        token=tok['access_token'],
+        refresh_token=tok.get('refresh_token'),
+        token_uri=TOKEN_URI,
+        client_id=proxy_client_id(),
+        scopes=tok.get('scope', '').split() or SCOPES,
+        expiry=_expiry(tok.get('expires_in', 3600)),
+    )
+
+
+def proxy_refresh(creds: Credentials) -> None:
+    """Refresh in place via the proxy (google-auth would send client_secret)."""
+    tok = proxy_token_request({
+        'grant_type': 'refresh_token',
+        'refresh_token': creds.refresh_token,
+    })
+    creds.token = tok['access_token']
+    creds.expiry = _expiry(tok.get('expires_in', 3600))
 
 
 def get_token_path(email: str) -> Path:
@@ -122,6 +186,17 @@ def load_token(email: str) -> Credentials | None:
         return None
 
     token_data = json.loads(token_path.read_text())
+    if proxy_secret_mode():
+        # from_authorized_user_info insists on a client_secret; we have none.
+        expiry = token_data.get('expiry')
+        return Credentials(
+            token=token_data.get('token'),
+            refresh_token=token_data.get('refresh_token'),
+            token_uri=TOKEN_URI,
+            client_id=proxy_client_id(),
+            scopes=SCOPES,
+            expiry=datetime.fromisoformat(expiry.rstrip('Z')) if expiry else None,
+        )
     return Credentials.from_authorized_user_info(token_data, SCOPES)
 
 
@@ -159,7 +234,10 @@ def refresh_credentials(email: str, creds: Credentials) -> Credentials | None:
         return None
 
     try:
-        creds.refresh(Request())
+        if proxy_secret_mode():
+            proxy_refresh(creds)
+        else:
+            creds.refresh(Request())
     except Exception:
         return None
     save_token(email, creds)
@@ -168,6 +246,8 @@ def refresh_credentials(email: str, creds: Credentials) -> Credentials | None:
 
 def require_credentials_file() -> None:
     """Fail early and legibly when the OAuth client secrets are absent."""
+    if proxy_secret_mode():
+        return
     if not CREDENTIALS_PATH.exists():
         raise FileNotFoundError(
             f"credentials.json not found at {CREDENTIALS_PATH}. "
@@ -221,6 +301,14 @@ def parse_redirect_response(pasted: str) -> tuple[str | None, str | None]:
 
 def build_headless_flow() -> Flow:
     """Build an OAuth flow whose redirect the local browser cannot intercept."""
+    if proxy_secret_mode():
+        # Only the auth URL is built from this config; the secret is never used.
+        config = {'installed': {
+            'client_id': proxy_client_id(),
+            'auth_uri': AUTH_URI,
+            'token_uri': TOKEN_URI,
+        }}
+        return Flow.from_client_config(config, SCOPES, redirect_uri=HEADLESS_REDIRECT_URI)
     return Flow.from_client_secrets_file(
         str(CREDENTIALS_PATH), SCOPES, redirect_uri=HEADLESS_REDIRECT_URI
     )
@@ -292,12 +380,16 @@ def run_headless_oauth_flow(
     code = prompt_for_code(state, input_fn)
 
     try:
-        flow.fetch_token(code=code)
+        if proxy_secret_mode():
+            creds = proxy_exchange_code(code)
+        else:
+            flow.fetch_token(code=code)
+            creds = flow.credentials
     except Exception as exc:
         print(f'Error: token exchange failed: {exc}', file=sys.stderr)
         sys.exit(1)
 
-    return finish_authorization(flow.credentials)
+    return finish_authorization(creds)
 
 
 def run_browser_oauth_flow() -> tuple[Credentials, str]:
@@ -319,6 +411,8 @@ def run_oauth_flow(headless: bool | None = None) -> tuple[Credentials, str]:
 
     Returns tuple of (credentials, email_address).
     """
+    if proxy_secret_mode():
+        headless = True
     if headless is None:
         headless = not browser_available()
     if headless:
